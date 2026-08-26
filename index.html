@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>起卦 · 三枚硬幣法</title>
+<style>
+:root{
+  --paper:#E9ECE3;
+  --paper-deep:#DDE2D6;
+  --ink:#1B2320;
+  --ink-soft:#5A6660;
+  --indigo:#3B4E66;
+  --cinnabar:#B23A2E;
+  --rule:#C3CABB;
+  --yang-bar: var(--ink);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  line-height:1.7;
+  -webkit-font-smoothing:antialiased;
+  display:flex;
+  justify-content:center;
+}
+.wrap{width:100%;max-width:520px;padding:28px 20px 64px;}
+header{border-bottom:1px solid var(--rule);padding-bottom:14px;margin-bottom:26px;}
+.eyebrow{
+  font-family:ui-monospace,"SFMono-Regular",Menlo,monospace;
+  font-size:11px;letter-spacing:.22em;color:var(--ink-soft);text-transform:uppercase;
+}
+h1{
+  font-family:"Songti TC","Noto Serif TC","PMingLiU",serif;
+  font-size:30px;font-weight:600;letter-spacing:.14em;margin:6px 0 2px;
+}
+.sub{font-size:13px;color:var(--ink-soft);margin:0;}
+.ask{margin-bottom:22px;}
+label{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px;}
+input[type=text]{
+  width:100%;padding:11px 13px;border:1px solid var(--rule);border-radius:2px;
+  background:#F3F5EE;color:var(--ink);font-size:15px;font-family:inherit;
+}
+input[type=text]:focus{outline:2px solid var(--indigo);outline-offset:1px;border-color:var(--indigo);}
+.stage{
+  border:1px solid var(--rule);background:#F3F5EE;
+  padding:26px 22px;border-radius:2px;margin-bottom:18px;min-height:250px;
+  display:flex;flex-direction:column;justify-content:center;
+}
+.stack{display:flex;flex-direction:column-reverse;gap:11px;}
+.line{display:grid;grid-template-columns:26px 1fr 44px;align-items:center;gap:10px;}
+.line .idx{
+  font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--ink-soft);text-align:right;
+}
+.bars{display:flex;gap:9px;height:11px;}
+.bar{background:var(--yang-bar);flex:1;border-radius:1px;}
+.line[data-yin="1"] .bars .bar{flex:0 0 calc(50% - 4.5px);}
+.line .mark{
+  font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--ink-soft);letter-spacing:.06em;
+}
+.line[data-changing="1"] .bars .bar{background:var(--cinnabar);}
+.line[data-changing="1"] .mark{color:var(--cinnabar);}
+.line.enter{animation:draw .34s ease-out both;}
+@keyframes draw{from{opacity:0;transform:translateY(7px) scaleX(.86);}to{opacity:1;transform:none;}}
+.placeholder{color:var(--ink-soft);font-size:14px;text-align:center;}
+.result{margin-top:4px;}
+.name-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.glyph{font-size:34px;line-height:1;}
+.name{
+  font-family:"Songti TC","Noto Serif TC","PMingLiU",serif;
+  font-size:24px;font-weight:600;letter-spacing:.1em;
+}
+.no{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--ink-soft);}
+.trigrams{font-size:13px;color:var(--indigo);margin:8px 0 0;}
+.body-text{font-size:15px;margin:14px 0 0;}
+.action{
+  border-left:2px solid var(--indigo);padding-left:12px;margin-top:14px;
+  font-size:14px;color:var(--indigo);
+}
+.moving{
+  margin-top:16px;padding-top:14px;border-top:1px dashed var(--rule);
+  font-size:14px;
+}
+.moving strong{color:var(--cinnabar);font-weight:600;}
+.empty{
+  font-size:14px;color:var(--ink-soft);
+  border:1px dashed var(--rule);padding:12px;border-radius:2px;margin-top:12px;
+}
+.empty code{
+  font-family:ui-monospace,Menlo,monospace;font-size:12px;
+  background:var(--paper-deep);padding:1px 4px;
+}
+.cast{
+  width:100%;padding:15px;border:none;border-radius:2px;
+  background:var(--ink);color:var(--paper);
+  font-family:inherit;font-size:16px;letter-spacing:.18em;cursor:pointer;
+}
+.cast:hover{background:#2C3733;}
+.cast:disabled{background:var(--ink-soft);cursor:default;}
+.cast:focus-visible{outline:2px solid var(--cinnabar);outline-offset:2px;}
+.coins{
+  text-align:center;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+  color:var(--ink-soft);height:18px;margin:10px 0 0;letter-spacing:.1em;
+}
+footer{
+  margin-top:34px;padding-top:14px;border-top:1px solid var(--rule);
+  font-size:12px;color:var(--ink-soft);
+}
+footer p{margin:0 0 6px;}
+@media (prefers-reduced-motion:reduce){
+  .line.enter{animation:none;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">三枚硬幣法 · 六爻</div>
+    <h1>起卦</h1>
+    <p class="sub">由初爻往上，一爻擲一次。</p>
+  </header>
+  <div class="ask">
+    <label for="q">想問的事（可留空，只存在這個畫面）</label>
+    <input type="text" id="q" placeholder="例：這份工作要不要接" autocomplete="off">
+  </div>
+  <div class="stage" id="stage" aria-live="polite">
+    <div class="placeholder" id="placeholder">心裡想著問題，按下方按鈕。</div>
+    <div class="stack" id="stack" hidden></div>
+    <div class="result" id="result" hidden></div>
+  </div>
+  <p class="coins" id="coins"></p>
+  <button class="cast" id="cast">起 卦</button>
+  <footer>
+    <p>本頁為象徵性解讀工具，僅供個人自我反思參考，不構成醫療、法律、財務或心理診斷建議。</p>
+    <p>白話說明為自撰草稿，非《易經》原文，使用前請自行校對。</p>
+    <p>隱私提醒：問題欄僅存於當前畫面，請避免輸入真實姓名、公司名稱、電話或地址。</p>
+  </footer>
+</div>
+<script>
+"use strict";
+/* ─────────────────────────────────────────────
+   1. 八卦查表：鍵為三爻二進位字串，由下往上，1=陽 0=陰
+   ───────────────────────────────────────────── */
+const TRIGRAMS = {
+  "111": { name:"乾", symbol:"☰", nature:"天" },
+  "110": { name:"兌", symbol:"☱", nature:"澤" },
+  "101": { name:"離", symbol:"☲", nature:"火" },
+  "100": { name:"震", symbol:"☳", nature:"雷" },
+  "011": { name:"巽", symbol:"☴", nature:"風" },
+  "010": { name:"坎", symbol:"☵", nature:"水" },
+  "001": { name:"艮", symbol:"☶", nature:"山" },
+  "000": { name:"坤", symbol:"☷", nature:"地" }
+};
+/* ─────────────────────────────────────────────
+   2. 六十四卦查表（已補齊 64 筆）
+   ───────────────────────────────────────────── */
+const HEXAGRAMS = {
+  "111111": { no:1, name:"乾為天", summary:"力量飽滿，方向明確，適合主動推進。", action:"保持前進，但設定停損與休息點，避免過度消耗。" },
+  "000000": { no:2, name:"坤為地", summary:"承載與順應的時刻，不適合搶先，適合把基礎做厚。", action:"順勢而為，把細節與支持系統顧好。" },
+  "100010": { no:3, name:"水雷屯", summary:"開端艱難，方向有但路還沒成形，混亂中帶有生機。", action:"先處理最卡的環節，不求一次到位。" },
+  "010001": { no:4, name:"山水蒙", summary:"經驗不足，處於學習狀態，需要引導而非硬闖。", action:"找可信的範例或請教，邊做邊修正。" },
+  "111010": { no:5, name:"水天需", summary:"需要等待，時機未到，急不得。", action:"補齊準備，讓等待變成優勢。" },
+  "010111": { no:6, name:"天水訟", summary:"立場衝突，話說不清，越爭越緊。", action:"把爭點寫下來，找中間規則或第三方釐清。" },
+  "010000": { no:7, name:"地水師", summary:"需要組織與紀律，眾人仰賴方向。", action:"明確分工與規則，帶領比說服重要。" },
+  "000010": { no:8, name:"水地比", summary:"需要結盟，找對人比做對事更關鍵。", action:"主動靠近價值一致的人，表達誠意。" },
+  "111011": { no:9, name:"風天小畜", summary:"力量被暫時牽制，小有積蓄但推不遠。", action:"積少成多，透過溝通累積助力。" },
+  "110111": { no:10, name:"天澤履", summary:"如履薄冰，禮節與分寸決定成敗。", action:"謹慎行事，尊重規則與對方的界線。" },
+  "111000": { no:11, name:"地天泰", summary:"上下相通，氣場順暢，適合合作與擴張。", action:"把握順勢，推進長期合作。" },
+  "000111": { no:12, name:"天地否", summary:"上下隔絕，溝通不通，適合保守。", action:"減少投入，守住現有，避免誤判。" },
+  "101111": { no:13, name:"天火同人", summary:"與人同行，方向一致才能成事。", action:"釐清共同目標，公開溝通立場。" },
+  "111101": { no:14, name:"火天大有", summary:"資源豐厚，受到支持，但也容易被看見。", action:"善用資源，並思考如何分配與回饋。" },
+  "001000": { no:15, name:"地山謙", summary:"低調反而有利，謙讓能化解阻力。", action:"不搶功，把成果留給團隊。" },
+  "000100": { no:16, name:"雷地豫", summary:"氣氛鬆動，適合帶動，但也容易鬆散。", action:"用愉悅帶動，別忘了節奏與底線。" },
+  "100110": { no:17, name:"澤雷隨", summary:"跟隨時勢，與對的人同行比方向更重要。", action:"觀察動向，選擇可信的對象跟隨。" },
+  "011001": { no:18, name:"山風蠱", summary:"積弊已久，需要整頓，事情牽連過去。", action:"追本溯源，從制度與根源修起。" },
+  "110000": { no:19, name:"地澤臨", summary:"機會靠近，適合親近與了解。", action:"主動接觸，但保持判斷力。" },
+  "000011": { no:20, name:"風地觀", summary:"需要觀察與展現，視角比行動重要。", action:"先看清楚局勢，再決定是否出手。" },
+  "100101": { no:21, name:"火雷噬嗑", summary:"遇到阻礙，需要咬合與決斷。", action:"果斷處理卡點，避免拖延。" },
+  "101001": { no:22, name:"山火賁", summary:"外表修飾，內在還需實質。", action:"適度包裝，但別讓形式蓋過內容。" },
+  "000001": { no:23, name:"山地剝", summary:"剝落的過程，不適合往前。", action:"減少損耗，守住核心。" },
+  "100000": { no:24, name:"地雷復", summary:"轉折點，舊的結束，新的萌芽。", action:"順著回升，小步前進。" },
+  "100111": { no:25, name:"天雷無妄", summary:"順其自然，不妄動反而有利。", action:"照規矩做，不存僥倖。" },
+  "111001": { no:26, name:"山天大畜", summary:"大量蓄積，厚積薄發。", action:"累積實力與資源，等待釋放點。" },
+  "100001": { no:27, name:"山雷頤", summary:"養分與言行，進什麼、說什麼決定狀態。", action:"檢視飲食、資訊與說話的來源。" },
+  "011110": { no:28, name:"澤風大過", summary:"負擔過重，結構需要加固。", action:"減輕重量，或增強支撐。" },
+  "010010": { no:29, name:"坎為水", summary:"重重困難，水流不止，考驗持續力。", action:"專注當下這關，保持彈性與退路。" },
+  "101101": { no:30, name:"離為火", summary:"依附與光明，能見度高，需要依憑。", action:"確認依附的對象與平台是否穩固。" },
+  "001110": { no:31, name:"澤山咸", summary:"相互感應，靠感覺與共鳴。", action:"多傾聽少說教，讓對方感受被理解。" },
+  "011100": { no:32, name:"雷風恆", summary:"持續與穩定，靠重複與承諾。", action:"固定節奏，長期投入。" },
+  "001111": { no:33, name:"天山遯", summary:"適合退避，不是認輸而是策略。", action:"拉開距離，保全實力。" },
+  "111100": { no:34, name:"雷天大壯", summary:"力量壯大，容易衝撞。", action:"用力但不逞強，尊重界線。" },
+  "000101": { no:35, name:"火地晉", summary:"向上晉升，能見度提高。", action:"把握表現機會，準備好成果。" },
+  "101000": { no:36, name:"地火明夷", summary:"光明受損，適合低調自保。", action:"收斂鋒芒，保護核心。" },
+  "101011": { no:37, name:"風火家人", summary:"家庭與團隊的秩序，內外分工。", action:"先把內部規則與角色釐清。" },
+  "110101": { no:38, name:"火澤睽", summary:"分歧與對望，方向不同。", action:"求同存異，各自處理各自部分。" },
+  "001010": { no:39, name:"水山蹇", summary:"前路有礙，進退兩難。", action:"先停下，找替代路徑或支援。" },
+  "010100": { no:40, name:"雷水解", summary:"鬆動與解開，糾結有機會散開。", action:"趁勢處理遺留問題，加速釋放。" },
+  "110001": { no:41, name:"山澤損", summary:"減損以求平衡，有捨才有得。", action:"評估什麼該先放掉。" },
+  "100011": { no:42, name:"風雷益", summary:"增益與助長，順勢加分。", action:"把資源投在會成長的地方。" },
+  "111110": { no:43, name:"澤天夬", summary:"決斷的時刻，需要公開表態。", action:"明快處理，避免拖泥帶水。" },
+  "011111": { no:44, name:"天風姤", summary:"偶然相遇，吸引力強但不易長久。", action:"享受相遇，但不急著承諾。" },
+  "000110": { no:45, name:"澤地萃", summary:"聚集，眾人集中，需要引導。", action:"建立共識與秩序。" },
+  "011000": { no:46, name:"地風升", summary:"逐漸上升，適合一步步往上。", action:"累積小勝，持續推進。" },
+  "010110": { no:47, name:"澤水困", summary:"受困，資源與空間受限。", action:"說出困境，尋求理解與協助。" },
+  "011010": { no:48, name:"水風井", summary:"根本與資源，制度像一口井。", action:"維護共享資源，確保長期可用。" },
+  "101110": { no:49, name:"澤火革", summary:"變革，去舊布新。", action:"時機與說法要到位，減少反彈。" },
+  "011101": { no:50, name:"火風鼎", summary:"鼎新，建立新秩序與養分。", action:"把資源與人才放到對的位置上燉煮。" },
+  "100100": { no:51, name:"震為雷", summary:"震動接連發生，聲勢大於實質損傷。", action:"穩住節奏，事後再檢視損傷。" },
+  "001001": { no:52, name:"艮為山", summary:"該止則止，停下是一種位置。", action:"暫停推進，用於整理與觀察。" },
+  "001011": { no:53, name:"風山漸", summary:"循序漸進，像漸進的發展。", action:"照步驟來，不跳級。" },
+  "110100": { no:54, name:"雷澤歸妹", summary:"關係與歸屬，位置不對等。", action:"釐清身份與期待，避免委屈。" },
+  "101100": { no:55, name:"雷火豐", summary:"豐盛到頂點，盛極的時刻。", action:"把握高點，同時準備下坡的規劃。" },
+  "001101": { no:56, name:"火山旅", summary:"旅居在外，不穩定，需要適應。", action:"保持靈活，謹慎行事。" },
+  "011011": { no:57, name:"巽為風", summary:"滲透與順服，靠柔和重複。", action:"用小幅度、可重複的方式推進。" },
+  "110110": { no:58, name:"兌為澤", summary:"喜悅與交流，口舌帶來機會也帶來誤會。", action:"多溝通，重要結論留文字。" },
+  "010011": { no:59, name:"風水渙", summary:"渙散，需要重新凝聚。", action:"透過共同行動或信念聚攏人心。" },
+  "110010": { no:60, name:"水澤節", summary:"節制與分寸，設定界線。", action:"設立規則與節奏，避免過度。" },
+  "110011": { no:61, name:"風澤中孚", summary:"誠信為核心，內在誠實帶來信任。", action:"說到做到，言行一致。" },
+  "001100": { no:62, name:"雷山小過", summary:"小有過越，細節上稍微超過。", action:"在小事上謹慎，大事上不冒進。" },
+  "101010": { no:63, name:"水火既濟", summary:"已完成，但完成中藏有風險。", action:"守成比擴張重要，檢查細節。" },
+  "010101": { no:64, name:"火水未濟", summary:"未完成，還在路上，變動多。", action:"保持謹慎，收尾要完整。" }
+};
+/* ─────────────────────────────────────────────
+   3. 擲幣：陽面 3、陰面 2，三枚相加得 6~9
+      9 老陽（變）／8 少陰／7 少陽／6 老陰（變）
+   ───────────────────────────────────────────── */
+/* 6/7/8/9 → 爻狀態。純函式，測試從這裡進入 */
+function lineFromValue(value){
+  return {
+    value,
+    yang: value === 7 || value === 9,    // 本卦陰陽
+    changing: value === 6 || value === 9 // 是否為變爻
+  };
+}
+
+function throwLine(){
+  const coins = [0,0,0].map(() => Math.random() < 0.5 ? 2 : 3);
+  const value = coins.reduce((a,b) => a+b, 0);
+  return Object.assign(lineFromValue(value), { coins });
+}
+
+const LINE_LABEL = { 6:"老陰 ✕", 7:"少陽", 8:"少陰", 9:"老陽 ○" };
+const POSITION = ["初","二","三","四","五","上"];
+
+/* 資料順序契約：lines[0]=初爻 … lines[5]=上爻。
+   畫面的上下顛倒只由 CSS 的 column-reverse 負責，資料一律由下往上。 */
+
+/* 由六爻算出本卦與之卦的二進位字串（由下往上） */
+function toBinary(lines, transform){
+  return lines.map(l => {
+    if (transform && l.changing) return l.yang ? "0" : "1";
+    return l.yang ? "1" : "0";
+  }).join("");
+}
+
+function trigramsOf(binary){
+  return {
+    lower: TRIGRAMS[binary.slice(0,3)],
+    upper: TRIGRAMS[binary.slice(3,6)]
+  };
+}
+
+/* Unicode 卦符區塊由 U+4DC0 起，依文王卦序排列 */
+function glyphOf(no){
+  return no ? String.fromCodePoint(0x4DBF + no) : "";
+}
+
+/* ─────────────────────────────────────────────
+   4. 畫面
+   ───────────────────────────────────────────── */
+const stackEl = document.getElementById("stack");
+const resultEl = document.getElementById("result");
+const placeholderEl = document.getElementById("placeholder");
+const coinsEl = document.getElementById("coins");
+const castBtn = document.getElementById("cast");
+
+function renderLine(line, i){
+  const el = document.createElement("div");
+  el.className = "line enter";
+  el.dataset.yin = line.yang ? "0" : "1";
+  el.dataset.changing = line.changing ? "1" : "0";
+  el.innerHTML =
+    '<span class="idx">' + POSITION[i] + '</span>' +
+    '<span class="bars">' + (line.yang ? '<i class="bar"></i>' : '<i class="bar"></i><i class="bar"></i>') + '</span>' +
+    '<span class="mark">' + line.value + " " + LINE_LABEL[line.value] + '</span>';
+  stackEl.appendChild(el);
+}
+
+function describe(binary, data){
+  const t = trigramsOf(binary);
+  const head = data
+    ? '<div class="name-row"><span class="glyph">' + glyphOf(data.no) + '</span>' +
+      '<span class="name">' + data.name + '</span>' +
+      '<span class="no">第 ' + data.no + ' 卦</span></div>'
+    : '<div class="name-row"><span class="name">尚未建入此卦</span></div>';
+  const tri = '<p class="trigrams">上卦 ' + t.upper.symbol + ' ' + t.upper.name + '（' + t.upper.nature + '）' +
+              '　下卦 ' + t.lower.symbol + ' ' + t.lower.name + '（' + t.lower.nature + '）</p>';
+  const text = data
+    ? '<p class="body-text">' + data.summary + '</p><p class="action">' + data.action + '</p>'
+    : '<p class="empty">這一卦的說明還沒寫。到原始碼的 <code>HEXAGRAMS</code> 表新增 ' +
+      '<code>"' + binary + '"</code> 這筆，就會顯示在這裡。</p>';
+  return head + tri + text;
+}
+
+function renderResult(lines){
+  const primary = toBinary(lines, false);
+  const changed = toBinary(lines, true);
+  const movingIdx = lines.map((l,i) => l.changing ? POSITION[i] : null).filter(Boolean);
+
+  let html = describe(primary, HEXAGRAMS[primary]);
+
+  if (movingIdx.length > 0){
+    html += '<div class="moving"><p><strong>變爻：' + movingIdx.join("、") + '</strong>（硃砂標示）</p>';
+    html += '<p style="margin:10px 0 0;color:var(--ink-soft);font-size:13px;">之卦</p>';
+    html += describe(changed, HEXAGRAMS[changed]);
+    html += '</div>';
+  } else {
+    html += '<div class="moving"><p>六爻皆不變，無之卦。看本卦即可。</p></div>';
+  }
+
+  resultEl.innerHTML = html;
+  resultEl.hidden = false;
+}
+
+async function cast(fixedValues){
+  castBtn.disabled = true;
+  placeholderEl.hidden = true;
+  resultEl.hidden = true;
+  stackEl.hidden = false;
+  stackEl.innerHTML = "";
+
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const delay = (reduce || fixedValues) ? 0 : 380;
+  const lines = [];
+
+  for (let i = 0; i < 6; i++){
+    const line = fixedValues ? lineFromValue(fixedValues[i]) : throwLine();
+    lines.push(line);
+    coinsEl.textContent = fixedValues
+      ? "指定值　第 " + POSITION[i] + " 爻 ＝ " + line.value
+      : "第 " + POSITION[i] + " 爻　" + line.coins.join(" · ") + " ＝ " + line.value;
+    renderLine(line, i);
+    if (delay) await new Promise(r => setTimeout(r, delay));
+  }
+
+  if (!fixedValues) coinsEl.textContent = "";
+  renderResult(lines);
+  castBtn.disabled = false;
+  castBtn.textContent = "再 起 一 卦";
+}
+
+castBtn.addEventListener("click", () => cast());
+
+
+/* ─────────────────────────────────────────────
+   5. 資料自我檢查（結果印在瀏覽器 Console）
+   ───────────────────────────────────────────── */
+function checkConsistency(){
+  const byNo = {}, byName = {};
+  const noCollision = [], nameCollision = [], roundTripFail = [];
+  Object.keys(HEXAGRAMS).forEach(b => {
+    const h = HEXAGRAMS[b];
+    if (byNo[h.no]) noCollision.push({ no:h.no, binaries:[byNo[h.no], b] });
+    else byNo[h.no] = b;
+    if (byName[h.name]) nameCollision.push({ name:h.name, binaries:[byName[h.name], b] });
+    else byName[h.name] = b;
+  });
+  Object.keys(byNo).forEach(no => {
+    const b = byNo[no];
+    if (!HEXAGRAMS[b] || String(HEXAGRAMS[b].no) !== String(no)) roundTripFail.push(no);
+  });
+  return {
+    noCollision, nameCollision, roundTripFail,
+    pass: noCollision.length === 0 && nameCollision.length === 0 && roundTripFail.length === 0
+  };
+}
+const NAME_CHECK_EXEMPT = [];
+function checkNameByTrigram(){
+  return Object.keys(HEXAGRAMS).map(b => {
+    const h = HEXAGRAMS[b];
+    const t = trigramsOf(b);
+    if (NAME_CHECK_EXEMPT.indexOf(b) !== -1) return { binary:b, name:h.name, status:"SKIP", why:"已列為例外" };
+    if (h.name.charAt(1) === "為"){
+      const ok = h.name.charAt(0) === t.upper.name &&
+                 t.upper.name === t.lower.name &&
+                 h.name.charAt(2) === t.upper.nature;
+      return { binary:b, name:h.name, status: ok ? "PASS" : "FAIL", why:"純卦格式" };
+    }
+    const ok = h.name.charAt(0) === t.upper.nature && h.name.charAt(1) === t.lower.nature;
+    return {
+      binary:b, name:h.name, status: ok ? "PASS" : "FAIL",
+      why:"應為 上" + t.upper.nature + " 下" + t.lower.nature
+    };
+  });
+}
+function allBinaries(){
+  const out = [];
+  for (let i = 0; i < 64; i++) out.push(i.toString(2).padStart(6, "0"));
+  return out;
+}
+const KNOWN_SAMPLES = {
+  "111111":{ no:1, name:"乾" },
+  "000000":{ no:2, name:"坤" },
+  "100010":{ no:3, name:"屯" },
+  "010001":{ no:4, name:"蒙" },
+  "111010":{ no:5, name:"需" },
+  "010111":{ no:6, name:"訟" },
+  "010000":{ no:7, name:"師" },
+  "000010":{ no:8, name:"比" }
+};
+function checkKnownSamples(){
+  return Object.keys(KNOWN_SAMPLES).map(b => {
+    const expect = KNOWN_SAMPLES[b];
+    const actual = HEXAGRAMS[b];
+    if (!actual) return { binary:b, expect:expect.name + "/no." + expect.no, status:"PENDING", actual:"（尚未建入）" };
+    const nameHit = actual.name.indexOf(expect.name) !== -1;
+    const noHit = actual.no === expect.no;
+    return {
+      binary:b,
+      expect: expect.name + "/no." + expect.no,
+      status: (nameHit && noHit) ? "PASS" : "FAIL",
+      actual: actual.name + "/no." + actual.no + (nameHit ? "" : "（名稱不符）") + (noHit ? "" : "（卦序不符）")
+    };
+  });
+}
+function checkTable(){
+  const keys = Object.keys(HEXAGRAMS);
+  const nos = keys.map(k => HEXAGRAMS[k].no);
+  const invalidBinary = keys.filter(k => !/^[01]{6}$/.test(k));
+  const invalidNo = nos.filter(n => !Number.isInteger(n) || n < 1 || n > 64);
+  const duplicateNo = [...new Set(nos.filter((n,i) => nos.indexOf(n) !== i))];
+  const missingNo = [];
+  for (let n = 1; n <= 64; n++) if (!nos.includes(n)) missingNo.push(n);
+  const missingBinary = allBinaries().filter(b => !(b in HEXAGRAMS));
+  const report = {
+    total: keys.length,
+    uniqueBinary: new Set(keys).size,
+    uniqueNo: new Set(nos).size,
+    invalidBinary, invalidNo, duplicateNo,
+    missingNo, missingBinary
+  };
+  report.pass = report.total === 64 &&
+                report.uniqueNo === 64 &&
+                missingBinary.length === 0 &&
+                invalidBinary.length === 0 &&
+                invalidNo.length === 0 &&
+                duplicateNo.length === 0;
+  return report;
+}
+const FIXED_CASES = [
+  { id:"A", values:[7,7,7,7,7,7], primary:"111111", changed:"111111", note:"乾 → 乾（無變爻）" },
+  { id:"B", values:[8,8,8,8,8,8], primary:"000000", changed:"000000", note:"坤 → 坤（無變爻）" },
+  { id:"C", values:[9,9,9,9,9,9], primary:"111111", changed:"000000", note:"乾 → 坤（六爻皆變）" },
+  { id:"D", values:[6,6,6,6,6,6], primary:"000000", changed:"111111", note:"坤 → 乾（六爻皆變）" },
+  { id:"E", values:[7,8,8,8,8,8], primary:"100000", changed:"100000", note:"初爻為陽：下卦震、上卦坤" },
+  { id:"F", values:[8,8,8,8,8,7], primary:"000001", changed:"000001", note:"上爻為陽：下卦坤、上卦艮" }
+];
+function runFixedCases(){
+  return FIXED_CASES.map(c => {
+    const lines = c.values.map(lineFromValue);
+    const primary = toBinary(lines, false);
+    const changed = toBinary(lines, true);
+    const moving = lines.filter(l => l.changing).length;
+    const expectMoving = c.values.filter(v => v === 6 || v === 9).length;
+    return {
+      case: c.id, note: c.note,
+      primary, changed, moving,
+      pass: primary === c.primary && changed === c.changed && moving === expectMoving
+    };
+  });
+}
+(function selfCheck(){
+  const t = checkTable();
+  console.log("[HEXAGRAM CHECK]");
+  console.log("Total: " + t.total + " / 64");
+  console.log("Unique binary: " + t.uniqueBinary);
+  console.log("Unique no: " + t.uniqueNo);
+  console.log("Invalid binary: [" + t.invalidBinary.join(", ") + "]");
+  console.log("Invalid no: [" + t.invalidNo.join(", ") + "]");
+  console.log("Duplicate no: [" + t.duplicateNo.join(", ") + "]");
+  console.log("Missing no (" + t.missingNo.length + "): [" + t.missingNo.join(", ") + "]");
+  console.log("Missing binary (" + t.missingBinary.length + "):");
+  t.missingBinary.forEach(b => {
+    const tr = trigramsOf(b);
+    console.log('  "' + b + '"  下卦' + tr.lower.name + '（' + tr.lower.nature + '）' +
+                ' 上卦' + tr.upper.name + '（' + tr.upper.nature + '）');
+  });
+  console.log(t.pass ? "PASS: Hexagram table complete" : "FAIL: Hexagram table incomplete");
+  console.log("[FIXED CASES]");
+  const results = runFixedCases();
+  results.forEach(r => console.log(
+    (r.pass ? "PASS" : "FAIL") + "  " + r.case + "  " + r.note +
+    "  本卦 " + r.primary + " → 之卦 " + r.changed + "  變爻 " + r.moving
+  ));
+  const logicPass = results.every(r => r.pass);
+  console.log(logicPass ? "PASS: 轉換邏輯 6/6" : "FAIL: 轉換邏輯有案例未通過，先不要繼續補資料");
+  console.log("[KNOWN SAMPLES]");
+  const samples = checkKnownSamples();
+  samples.forEach(s => console.log(
+    s.status.padEnd(8) + s.binary + "  預期 " + s.expect + "　實際 " + s.actual
+  ));
+  const sampleFail = samples.filter(s => s.status === "FAIL").length;
+  const samplePending = samples.filter(s => s.status === "PENDING").length;
+  console.log(sampleFail > 0
+    ? "FAIL: 已知樣本有 " + sampleFail + " 筆對不上，卦表可能被編錯"
+    : "PASS: 已知樣本無衝突（" + samplePending + " 筆尚未建入，未納入判定）");
+  console.log("[CONSISTENCY] binary ↔ no ↔ name");
+  const c = checkConsistency();
+  console.log("  no collision: " + JSON.stringify(c.noCollision));
+  console.log("  name collision: " + JSON.stringify(c.nameCollision));
+  console.log("  round-trip fail: [" + c.roundTripFail.join(", ") + "]");
+  console.log(c.pass ? "PASS: 三向無衝突" : "FAIL: 三向一致性有衝突");
+  console.log("[NAME ↔ TRIGRAM]");
+  const nameRes = checkNameByTrigram();
+  const nameFail = nameRes.filter(r => r.status === "FAIL");
+  nameFail.forEach(r => console.log("  FAIL  " + r.binary + "  " + r.name + "  " + r.why));
+  console.log(nameFail.length === 0
+    ? "PASS: 卦名與上下卦象相符（" + nameRes.filter(r => r.status === "PASS").length + " 筆檢查）"
+    : "FAIL: " + nameFail.length + " 筆卦名與上下卦象不符");
+})();
+</script>
+</body>
+</html>
