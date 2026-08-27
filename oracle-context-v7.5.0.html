@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<!--
+修正版 v7.1.0（相對於原檔）
+[FIX-1] validateMutual 綜卦期望值 32 → 36（互綜 28 對 + 自綜 8 卦），原本恆為 FAIL
+[FIX-2] BASELINE_HEXAGRAM_HASH 更新為目前資料表實算值，原常數與實算不符，Hash 恆為 UNVERIFIED
+[FIX-3] renderRCList 讀取 c.checkedAt（欄位不存在）→ 改讀 c.createdAt，原本顯示 Invalid Date
+[FIX-4] editRC 允許任意 status 字串 → 加白名單；且 loadRecords 不再因 status 不在白名單而整筆丟棄（原本會造成資料永久遺失）
+[FIX-5] renderTimeline 在 changed 為 null 時存取 .name → 加空值保護
+[FIX-6] 剪貼簿失敗無任何處理 → 加 try/catch + execCommand 備援 + 手動複製區
+[FIX-7] addRealityCheck / editRC / delRC 在儲存失敗時仍更新畫面 → 改為儲存失敗即回復記憶體狀態
+[FIX-8] 版本字串不一致（畫面 v8 vs APP_VERSION 7.0.0）→ 統一為 7.1.0（RECORDS_KEY 維持 oracle_v7_records，不動既有資料）
+[FIX-9] originalDivinationData.createdAt 與 record.createdAt 各自呼叫 new Date() → 共用同一時間戳
+[ADD-1] 新增 validateKingWenPairs()：檢查第 2k-1 與 2k 卦互為綜卦或錯卦（通行本卦序結構性質）
+
+v7.1.1 追加
+[FIX-10b] Hash 失敗標示改為 UNAVAILABLE；初始化外層 catch 補上 checkedAt 與 renderStatus()，UI 初始化完全不依賴 Hash
+[FIX-11] loadRecords 過濾掉的結構不符紀錄改存入隔離區（oracle_v7_quarantine），JSON 無法解析時原始字串備份至 oracle_v7_corrupt_backup；
+         兩者都不會被 saveRecords 或「清除所有本機紀錄」覆蓋，設定頁可檢視、複製、單獨清除
+
+v7.1.2 追加
+[FIX-11b] corrupt backup 改為內容比對（corruptBackupSeen 內容 Set，取代原本「整頁只執行一次」的 corruptBackupDone 布林值）：
+          同一份壞 JSON 內容只備份一次，內容不同的壞 JSON 另開 timestamp key，不再被第一次備份「鎖住」
+[FIX-12] rerunValidationUI() 補上 try/catch：未來若驗證函式擲出例外，畫面會顯示錯誤訊息而非無回應
+
+v7.2.0（介面精簡，非 bug 修正）
+[UI-1] 主畫面 dataStatus 區塊原本直接展開完整驗證明細（來源／筆數／卦序／唯一性／八卦組成／
+       綜卦／錯卦／卦序配對／Hash 全部展開），改為一行狀態：「資料驗證：PASS · 64 卦資料結構正常」，
+       結構性檢查（筆數/卦序/唯一性/八卦組成/綜卦/錯卦/卦序配對）任一 FAIL 時改顯示「資料驗證：FAIL · 詳見設定頁」；
+       Hash 未 PASS 時（UNVERIFIED 或環境不支援 crypto.subtle）在結構 PASS 的前提下附加簡短提示，不隱藏
+[UI-2] 設定頁新增 dataStatusSettings 短狀態區塊（結構驗證 PASS/FAIL、Hash 比對結果、最後檢查時間），
+       完整逐項報告改為按「重跑本地驗證（完整逐項報告）」才顯示於 validationOut，不再預設展開；
+       同一份報告內容另整理為 README.md「Local Validation」章節，供不開啟頁面即可核對
+[UI-3] renderStatus() 拆成 structuralPass()（純布林判斷）＋ buildDetailReport()（完整 HTML 明細，
+       供 rerunValidationUI 與初始 renderStatus 共用）＋ renderStatus()（短狀態渲染），避免明細字串重複維護
+
+v7.3.0
+[P0] 新增脈絡分析（renderContextAnalysis）：在「脈絡」頁按專案（或全部）比對多筆紀錄，純次數統計，
+     不做語意理解或因果推論——分類分布、重複出現的結果（≥2次，易經本卦或塔羅卡牌）、Reality Check 狀態統計、
+     重複字詞（computeRepeatedPhrases：字串層級 n-gram，非語意主題模型，需出現在 ≥2 筆不同紀錄才計入）；
+     時間軸同步依同一專案篩選；紀錄不足 2 筆時明確顯示樣本不足，不產出統計
+[UI-4] 移除主畫面上原本會出現的工程內部資訊，改放到僅供進階查核的設定頁：
+       頁首版本／README 提示行、頁尾 footerDev（storage key、Hash 前綴、PASS/FAIL 代碼）、
+       起卦結果卡片的內部 ID、schemaVersion、六爻二進位陣列 dump、逐次顯示的資料表驗證 PASS 字樣、
+       以及原本預設展開、內含 binary 陣列與 prompt 樣板文字的 promptPreview 面板（改為預設隱藏，
+       按「預覽 Prompt 內容」才顯示；複製功能本身不受影響，因為 copyPromptCurrent() 直接呼叫
+       buildPrompt() 產生文字，不依賴這個面板是否展開）
+
+v7.4.0
+[P1] 自訂子分類輸入：點「自訂」不再把字面字串「自訂」當成子分類存入紀錄（原本的缺陷），
+     改為顯示輸入框；驗證 trim 後非空、長度上限 20 字、與現有（內建或自訂）重複時直接選取既有值
+     而不重複新增；使用者輸入存於獨立的 CUSTOM_SUBCATS_KEY（oracle_v7_custom_subcats），
+     不寫回 subMap 常數本身，避免污染內建分類資料；渲染一律用 button.textContent 或既有的
+     escapeHTML() 路徑，不會有 HTML injection 風險；同一輸入框支援 Enter 直接送出
+
+v7.4.1
+[UI-5] 移除主畫面頭卡片上的「隱私提醒」段落與「資料驗證」狀態框（使用者指定畫面）；
+       dataStatus 元素已從 DOM 移除，renderStatus() 對它的更新原本就有 if(header) 判斷式，
+       元素不存在時不會報錯；驗證狀態改為只在設定頁的 dataStatusSettings 顯示（未變動）
+
+v7.5.0
+[P3] 塔羅 78 張：資料來自使用者提供的 a4.html（一份靜態印刷用速查表元件，非抽牌工具，
+     已實際開啟核對：22 大阿爾克那 + 4 花色各 14 張 = 78 張，loveU/loveR/careerU/careerR/suit
+     六欄位齊全，78 個 id 唯一）。抽牌邏輯（隨機選卡＋正逆位各 50%）為本頁新增，非參考檔案原有。
+     解讀模式對應：category==='love' 用 loveU/loveR，其餘分類（work/study/other）一律對應
+     careerU/careerR——這是本頁自訂的簡化規則（資料本身只有感情/事業兩組欄位，非四分類各自獨立），
+     未經使用者逐項確認，程式碼與此處都需標明為假設而非既定事實。
+     doDivine() 拆成路由，依 currentSystem 分派到 doDivineYijing()（原 doDivine 內容整段搬移，
+     邏輯不變）或新增的 doDivineTarot()。switchSystem() 開放 'tarot'，'daily' 仍攔截。
+[P3-FIX] 嚴重缺陷：isValidRecord() 原本寫死要求 primary.bin（6 元素）與 lines（6 元素），
+     兩者皆為易經專屬欄位。塔羅紀錄的 primary 只有 {name,sym}，沒有 bin/lines——
+     若不修正，塔羅紀錄存檔後下一次 loadRecords()（例如 saveRecords 內的 updateCount 呼叫）
+     就會判定其「結構不符」，移入隔離區；UI 當下雖仍顯示，但重新整理頁面或切到「紀錄」/「脈絡」
+     會找不到這筆紀錄。已改為依 system 分流驗證規則（塔羅檢查 card.id/name/orientation，
+     易經維持原本的 bin/lines 檢查），並以「抽牌後立即重讀 loadRecords()」的方式實測驗證。
+[P3-UI] renderResult()／buildPrompt()／renderTimeline()／renderAllRecords()／copyTimelinePrompt()
+     原本假設每筆紀錄都是易經（寫死「爻值」「本卦」「→ 無變卦」等字樣），這些函式現在依
+     r.system 分流：resultTitle()／resultDetailHTML()／oracleDataLine()／resultSummaryText()。
+     脈絡分析的「重複出現的本卦」標籤改為系統中性的「重複出現的結果」（易經本卦或塔羅卡牌）。
+     設定頁驗證區塊新增塔羅資料的結構檢查（張數/唯一性/花色分布/欄位完整性），與易經檢查並列，
+     一併計入 structuralPass()；README.md 同步補上對應章節。
+-->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORACLE·脈絡 - 占卜 × 脈絡紀錄 × 現實驗證</title>
+<meta name="description" content="ORACLE·脈絡 - 僅供自我反思與個人紀錄">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e2a;--card:#1e1e3a;--card2:#0f0f23;--gold:#c9a86a;--gold2:#f5e6c8;--text:#e8e0d0;--border:rgba(201,168,106,0.25);--ok:#4ade80;--warn:#facc15;--bad:#f87171}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Serif TC',serif;background:linear-gradient(180deg,var(--bg),#1a1033);color:var(--text);font-size:16px;line-height:1.8;min-height:100vh}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px}
+.card-sub{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:16px}
+.btn{height:48px;padding:0 20px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border:none}
+.btn:disabled{opacity:0.5}
+.btn-gold{background:var(--gold);color:#1a1033}
+.btn-ghost{background:#2a2a4a;border:1px solid var(--border);color:var(--gold2)}
+.tab{padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text)}
+.tab.active{background:var(--gold);color:#1a1033}
+.tab.building{opacity:0.5}
+.input{width:100%;height:52px;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:0 16px;color:var(--gold2);font-size:16px}
+.input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid rgba(201,168,106,.45);outline-offset:2px}
+.badge{font-size:13px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.08);border:1px solid var(--border)}
+.mono{font-family:ui-monospace,monospace;font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+.hidden{display:none}
+.timeline{position:relative;padding-left:28px}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:linear-gradient(var(--gold),transparent)}
+.dot{position:absolute;left:1px;width:14px;height:14px;border-radius:50%;background:var(--gold);border:2px solid var(--bg)}
+.status{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-pending{background:#9ca3af}.status-partial{background:#60a5fa}.status-ok{background:var(--ok)}.status-fail{background:var(--bad)}.status-insuf{background:var(--warn)}
+footer{max-width:840px;margin:40px auto 0;padding:0 20px 40px;text-align:center;font-size:13px;opacity:0.7}
+select{background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:14px}
+textarea{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px;color:var(--text);font-size:15px;resize:vertical}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+.small{font-size:14px;opacity:0.9;line-height:1.6}
+.content{font-size:15px;line-height:1.8}
+</style>
+</head>
+<body>
+<header style="max-width:840px;margin:0 auto;padding:32px 20px 0">
+<h1 style="font-size:28px;letter-spacing:0.15em;font-weight:700;color:var(--gold)">ORACLE·脈絡</h1>
+<div class="card" style="margin-top:20px">
+<p class="content"><b style="color:var(--gold)">● 使用聲明：</b>僅供娛樂、自我反思與個人紀錄。</p>
+<p class="content" style="margin-top:8px"><b style="color:var(--gold)">● 科學限制：</b>占卜等象徵系統無法以科學方法驗證具有預測能力。</p>
+<p class="content" style="margin-top:8px"><b style="color:var(--gold)">● 決策限制：</b>不應取代專業判斷。</p>
+</div>
+<div style="margin-top:24px;display:flex;gap:8px;flex-wrap:wrap">
+<button class="tab active" data-view="oracle" onclick="switchView('oracle')">占卜</button>
+<button class="tab" data-view="context" onclick="switchView('context')">脈絡</button>
+<button class="tab" data-view="records" onclick="switchView('records')">紀錄</button>
+<button class="tab" data-view="settings" onclick="switchView('settings')">設定</button>
+<span class="badge" id="recordCount">0 則紀錄</span>
+<span class="badge" id="corruptWarn" style="display:none;color:#f87171">⚠ 本機紀錄解析失敗</span>
+</div>
+<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap" id="systemTabs">
+<button class="tab active" data-system="yijing" onclick="switchSystem('yijing')">易經64 可用</button>
+<button class="tab" data-system="tarot" onclick="switchSystem('tarot')">塔羅78 可用</button>
+<button class="tab building" data-system="daily" onclick="switchSystem('daily')">每日指引 建置中</button>
+</div>
+</header>
+<main style="max-width:840px;margin:0 auto;padding:20px">
+<div id="view-oracle">
+<div class="card">
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="tab active" data-cat="work" onclick="setCat('work')">工作</button>
+<button class="tab" data-cat="love" onclick="setCat('love')">感情</button>
+<button class="tab" data-cat="study" onclick="setCat('study')">學業</button>
+<button class="tab" data-cat="other" onclick="setCat('other')">其他</button>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px" id="subCats"></div>
+<div id="customSubInput" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
+<input class="input" id="customSubText" maxlength="20" placeholder="輸入分類名稱（1–20字）" style="flex:1;min-width:160px;height:44px" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmCustomSub();}">
+<button class="btn btn-ghost" onclick="confirmCustomSub()">新增</button>
+<button class="btn btn-ghost" onclick="cancelCustomSub()">取消</button>
+</div>
+<input class="input" id="qInput" placeholder="輸入你的問題，例如：在A公司能累積能力嗎？（避免真實姓名）" style="margin-top:16px">
+<div style="display:flex;justify-content:space-between;margin-top:10px" class="small">
+<span>專案：<select id="projectSel"></select></span>
+<span id="drawMethodInfo">三枚銅錢法 6:1/8 7:3/8 8:3/8 9:1/8</span>
+</div>
+<button class="btn btn-gold" id="divineBtn" style="width:100%;margin-top:16px" onclick="doDivine()">抽取占卜 · 三枚銅錢法</button>
+<div class="small" style="margin-top:8px" id="lastInfo"></div>
+</div>
+<div id="resultBox" class="card hidden" style="margin-top:24px"></div>
+</div>
+<div id="view-context" class="hidden"><div class="card">
+<h2>脈絡時間軸</h2>
+<div class="small" style="margin-top:10px">範圍：<select id="contextProjectSel" onchange="onContextProjectChange(this.value)"></select></div>
+<div id="contextAnalysis" style="margin-top:14px"></div>
+<div id="timeline" class="timeline" style="margin-top:16px"></div>
+</div></div>
+<div id="view-records" class="hidden"><div class="card"><h2>所有紀錄</h2><div id="allRecords" style="margin-top:16px"></div></div></div>
+<div id="view-settings" class="hidden">
+<div class="card"><h2>設定與驗證</h2>
+<div class="content" style="margin-top:12px">
+<p><b>版本：</b><span id="appVer"></span></p>
+<p><b>儲存：</b><span id="storageInfo"></span></p>
+<p class="small" style="margin-top:8px">資料來源：易經卦名/卦序、塔羅牌義皆為外部參考，未於本頁內驗證出處</p>
+<div id="dataStatusSettings" class="small" style="margin-top:8px;background:var(--card2);padding:12px;border-radius:8px">驗證中...</div>
+<button class="btn btn-ghost" style="margin-top:12px" onclick="rerunValidationUI()">重跑本地驗證（完整逐項報告）</button>
+<button class="btn btn-ghost" style="margin-top:12px;margin-left:8px" onclick="testToss()">測試銅錢機率 100k</button>
+<button class="btn btn-ghost" style="margin-top:12px" onclick="doReset()">清除所有本機紀錄（二次確認）</button>
+<div id="validationOut" class="small" style="margin-top:12px;background:#0f0f23;padding:12px;border-radius:8px"></div>
+<div id="tossOut" class="mono small" style="margin-top:12px;background:#0f0f23;padding:12px;border-radius:8px"></div>
+<h3 style="margin-top:20px;font-size:17px;color:var(--gold)">隔離區</h3>
+<p class="small">讀取時結構不符的紀錄不會被丟棄，改存到隔離區；一般儲存與「清除所有本機紀錄」都不會動到這裡。</p>
+<div id="quarantineInfo" class="mono small" style="margin-top:8px;background:#0f0f23;padding:12px;border-radius:8px"></div>
+<button class="btn btn-ghost" style="margin-top:12px" onclick="copyQuarantine()">複製隔離區 JSON</button>
+<button class="btn btn-ghost" style="margin-top:12px;margin-left:8px" onclick="clearQuarantine()">清除隔離區（二次確認）</button>
+</div></div>
+</div>
+<div id="manualCopyBox" class="card hidden" style="margin-top:20px">
+<p class="content"><b style="color:var(--gold)">自動複製未成功</b>：請手動選取下方文字複製（此瀏覽器或內嵌環境不允許程式寫入剪貼簿）。</p>
+<textarea id="manualCopyText" style="height:200px;margin-top:8px" readonly></textarea>
+<button class="btn btn-ghost" style="margin-top:8px" onclick="document.getElementById('manualCopyBox').classList.add('hidden')">關閉</button>
+</div>
+</main>
+<footer>
+<div id="footerUser">ORACLE·脈絡 · 僅供自我反思與個人紀錄 · 非事實預測</div>
+</footer>
+<script>
+const APP_VERSION="7.5.0";
+const STORAGE_PREFIX="oracle_v7";
+const RECORDS_KEY=STORAGE_PREFIX+"_records";
+const PROJECTS_KEY=STORAGE_PREFIX+"_projects";
+const QUARANTINE_KEY=STORAGE_PREFIX+"_quarantine";
+const CORRUPT_BACKUP_KEY=STORAGE_PREFIX+"_corrupt_backup";
+const CUSTOM_SUBCATS_KEY=STORAGE_PREFIX+"_custom_subcats";
+const CUSTOM_SUB_MAX_LEN=20;
+/* [FIX-2] 由目前 HEXAGRAMS 資料表以 canonical JSON（僅 n 與 bin）實算之 SHA-256 */
+const BASELINE_HEXAGRAM_HASH="b194606f246d876c3d4db1dc624468d3a971a1c736aa8883474eb9e859c3c4eb";
+const PROJECTS={projectA:{id:"projectA",name:"專案A-職涯能力累積"},projectB:{id:"projectB",name:"專案B-關係探索"},other:{id:"other",name:"其他"}};
+function escapeHTML(v){return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");}
+function fmtTime(iso){if(!iso) return "時間未知";const d=new Date(iso);return isNaN(d.getTime())?"時間未知":d.toLocaleString();}
+const TRIGRAMS={qian:[1,1,1],dui:[1,1,0],li:[1,0,1],zhen:[1,0,0],xun:[0,1,1],kan:[0,1,0],gen:[0,0,1],kun:[0,0,0]};
+const HEXAGRAMS=[
+{n:1,name:"乾為天",sym:"䷀",up:"qian",low:"qian",bin:[1,1,1,1,1,1]},
+{n:2,name:"坤為地",sym:"䷁",up:"kun",low:"kun",bin:[0,0,0,0,0,0]},
+{n:3,name:"水雷屯",sym:"䷂",up:"kan",low:"zhen",bin:[1,0,0,0,1,0]},
+{n:4,name:"山水蒙",sym:"䷃",up:"gen",low:"kan",bin:[0,1,0,0,0,1]},
+{n:5,name:"水天需",sym:"䷄",up:"kan",low:"qian",bin:[1,1,1,0,1,0]},
+{n:6,name:"天水訟",sym:"䷅",up:"qian",low:"kan",bin:[0,1,0,1,1,1]},
+{n:7,name:"地水師",sym:"䷆",up:"kun",low:"kan",bin:[0,1,0,0,0,0]},
+{n:8,name:"水地比",sym:"䷇",up:"kan",low:"kun",bin:[0,0,0,0,1,0]},
+{n:9,name:"風天小畜",sym:"䷈",up:"xun",low:"qian",bin:[1,1,1,0,1,1]},
+{n:10,name:"天澤履",sym:"䷉",up:"qian",low:"dui",bin:[1,1,0,1,1,1]},
+{n:11,name:"地天泰",sym:"䷊",up:"kun",low:"qian",bin:[1,1,1,0,0,0]},
+{n:12,name:"天地否",sym:"䷋",up:"qian",low:"kun",bin:[0,0,0,1,1,1]},
+{n:13,name:"天火同人",sym:"䷌",up:"qian",low:"li",bin:[1,0,1,1,1,1]},
+{n:14,name:"火天大有",sym:"䷍",up:"li",low:"qian",bin:[1,1,1,1,0,1]},
+{n:15,name:"地山謙",sym:"䷎",up:"kun",low:"gen",bin:[0,0,1,0,0,0]},
+{n:16,name:"雷地豫",sym:"䷏",up:"zhen",low:"kun",bin:[0,0,0,1,0,0]},
+{n:17,name:"澤雷隨",sym:"䷐",up:"dui",low:"zhen",bin:[1,0,0,1,1,0]},
+{n:18,name:"山風蠱",sym:"䷑",up:"gen",low:"xun",bin:[0,1,1,0,0,1]},
+{n:19,name:"地澤臨",sym:"䷒",up:"kun",low:"dui",bin:[1,1,0,0,0,0]},
+{n:20,name:"風地觀",sym:"䷓",up:"xun",low:"kun",bin:[0,0,0,0,1,1]},
+{n:21,name:"火雷噬嗑",sym:"䷔",up:"li",low:"zhen",bin:[1,0,0,1,0,1]},
+{n:22,name:"山火賁",sym:"䷕",up:"gen",low:"li",bin:[1,0,1,0,0,1]},
+{n:23,name:"山地剝",sym:"䷖",up:"gen",low:"kun",bin:[0,0,0,0,0,1]},
+{n:24,name:"地雷復",sym:"䷗",up:"kun",low:"zhen",bin:[1,0,0,0,0,0]},
+{n:25,name:"天雷无妄",sym:"䷘",up:"qian",low:"zhen",bin:[1,0,0,1,1,1]},
+{n:26,name:"山天大畜",sym:"䷙",up:"gen",low:"qian",bin:[1,1,1,0,0,1]},
+{n:27,name:"山雷頤",sym:"䷚",up:"gen",low:"zhen",bin:[1,0,0,0,0,1]},
+{n:28,name:"澤風大過",sym:"䷛",up:"dui",low:"xun",bin:[0,1,1,1,1,0]},
+{n:29,name:"坎為水",sym:"䷜",up:"kan",low:"kan",bin:[0,1,0,0,1,0]},
+{n:30,name:"離為火",sym:"䷝",up:"li",low:"li",bin:[1,0,1,1,0,1]},
+{n:31,name:"澤山咸",sym:"䷞",up:"dui",low:"gen",bin:[0,0,1,1,1,0]},
+{n:32,name:"雷風恆",sym:"䷟",up:"zhen",low:"xun",bin:[0,1,1,1,0,0]},
+{n:33,name:"天山遯",sym:"䷠",up:"qian",low:"gen",bin:[0,0,1,1,1,1]},
+{n:34,name:"雷天大壯",sym:"䷡",up:"zhen",low:"qian",bin:[1,1,1,1,0,0]},
+{n:35,name:"火地晉",sym:"䷢",up:"li",low:"kun",bin:[0,0,0,1,0,1]},
+{n:36,name:"地火明夷",sym:"䷣",up:"kun",low:"li",bin:[1,0,1,0,0,0]},
+{n:37,name:"風火家人",sym:"䷤",up:"xun",low:"li",bin:[1,0,1,0,1,1]},
+{n:38,name:"火澤睽",sym:"䷥",up:"li",low:"dui",bin:[1,1,0,1,0,1]},
+{n:39,name:"水山蹇",sym:"䷦",up:"kan",low:"gen",bin:[0,0,1,0,1,0]},
+{n:40,name:"雷水解",sym:"䷧",up:"zhen",low:"kan",bin:[0,1,0,1,0,0]},
+{n:41,name:"山澤損",sym:"䷨",up:"gen",low:"dui",bin:[1,1,0,0,0,1]},
+{n:42,name:"風雷益",sym:"䷩",up:"xun",low:"zhen",bin:[1,0,0,0,1,1]},
+{n:43,name:"澤天夬",sym:"䷪",up:"dui",low:"qian",bin:[1,1,1,1,1,0]},
+{n:44,name:"天風姤",sym:"䷫",up:"qian",low:"xun",bin:[0,1,1,1,1,1]},
+{n:45,name:"澤地萃",sym:"䷬",up:"dui",low:"kun",bin:[0,0,0,1,1,0]},
+{n:46,name:"地風升",sym:"䷭",up:"kun",low:"xun",bin:[0,1,1,0,0,0]},
+{n:47,name:"澤水困",sym:"䷮",up:"dui",low:"kan",bin:[0,1,0,1,1,0]},
+{n:48,name:"水風井",sym:"䷯",up:"kan",low:"xun",bin:[0,1,1,0,1,0]},
+{n:49,name:"澤火革",sym:"䷰",up:"dui",low:"li",bin:[1,0,1,1,1,0]},
+{n:50,name:"火風鼎",sym:"䷱",up:"li",low:"xun",bin:[0,1,1,1,0,1]},
+{n:51,name:"震為雷",sym:"䷲",up:"zhen",low:"zhen",bin:[1,0,0,1,0,0]},
+{n:52,name:"艮為山",sym:"䷳",up:"gen",low:"gen",bin:[0,0,1,0,0,1]},
+{n:53,name:"風山漸",sym:"䷴",up:"xun",low:"gen",bin:[0,0,1,0,1,1]},
+{n:54,name:"雷澤歸妹",sym:"䷵",up:"zhen",low:"dui",bin:[1,1,0,1,0,0]},
+{n:55,name:"雷火豐",sym:"䷶",up:"zhen",low:"li",bin:[1,0,1,1,0,0]},
+{n:56,name:"火山旅",sym:"䷷",up:"li",low:"gen",bin:[0,0,1,1,0,1]},
+{n:57,name:"巽為風",sym:"䷸",up:"xun",low:"xun",bin:[0,1,1,0,1,1]},
+{n:58,name:"兌為澤",sym:"䷹",up:"dui",low:"dui",bin:[1,1,0,1,1,0]},
+{n:59,name:"風水渙",sym:"䷺",up:"xun",low:"kan",bin:[0,1,0,0,1,1]},
+{n:60,name:"水澤節",sym:"䷻",up:"kan",low:"dui",bin:[1,1,0,0,1,0]},
+{n:61,name:"風澤中孚",sym:"䷼",up:"xun",low:"dui",bin:[1,1,0,0,1,1]},
+{n:62,name:"雷山小過",sym:"䷽",up:"zhen",low:"gen",bin:[0,0,1,1,0,0]},
+{n:63,name:"水火既濟",sym:"䷾",up:"kan",low:"li",bin:[1,0,1,0,1,0]},
+{n:64,name:"火水未濟",sym:"䷿",up:"li",low:"kan",bin:[0,1,0,1,0,1]}
+];
+const HEX_MAP={};HEXAGRAMS.forEach(h=>{HEX_MAP[h.bin.join('')]=h;});
+/* 塔羅 78 張資料：來源為使用者提供的 a4.html（一份靜態印刷用速查表元件，非抽牌工具）。
+   每張卡含 loveU/loveR（感情：正位/逆位）與 careerU/careerR（事業：正位/逆位）兩組短語，
+   suit 分 major(22) / wands·cups·swords·pentacles(各14)，共 78 張，已比對 id 全部唯一。 */
+const TAROT_CARDS=[
+{id:"m0",name:"0 愚者",loveU:"新戀情/自由戀",loveR:"玩弄/不敢愛",careerU:"轉職創業",careerR:"衝動離職",suit:"major"},
+{id:"m1",name:"1 魔術師",loveU:"主動脫單",loveR:"渣欺騙",careerU:"提案成功",careerR:"能力不足",suit:"major"},
+{id:"m2",name:"2 女祭司",loveU:"暗戀觀察",loveR:"小三冷戰",careerU:"幕後進修",careerR:"判斷失誤",suit:"major"},
+{id:"m3",name:"3 女皇",loveU:"被寵/結婚懷孕",loveR:"依賴拜金",careerU:"豐收升遷",careerR:"揮霍停滯",suit:"major"},
+{id:"m4",name:"4 皇帝",loveU:"穩定結婚對象",loveR:"控制冷暴力",careerU:"當主管大公司",careerR:"被壓固執",suit:"major"},
+{id:"m5",name:"5 教皇",loveU:"結婚前提相親",loveR:"不倫被反對",careerU:"考照跟對老師",careerR:"理念不合",suit:"major"},
+{id:"m6",name:"6 戀人",loveU:"真愛熱戀",loveR:"三角分手",careerU:"合作熱愛",careerR:"拆夥選錯",suit:"major"},
+{id:"m7",name:"7 戰車",loveU:"主動追遠距成",loveR:"控制聚少離多",careerU:"衝業績出差",careerR:"方向錯內耗",suit:"major"},
+{id:"m8",name:"8 力量",loveU:"以柔克剛長久",loveR:"忍無可忍吵架",careerU:"耐心抗壓",careerR:"沒自信被欺",suit:"major"},
+{id:"m9",name:"9 隱者",loveU:"單身需要空間",loveR:"孤單已讀不回",careerU:"進修單幹找方向",careerR:"閉門造車",suit:"major"},
+{id:"m10",name:"10 命輪",loveU:"一見鍾情閃婚",loveR:"錯過忽冷忽熱",careerU:"好運轉職時機",careerR:"運差時機錯",suit:"major"},
+{id:"m11",name:"11 正義",loveU:"公平結婚登記",loveR:"不公劈腿被抓",careerU:"合約公平考核",careerR:"糾紛不公",suit:"major"},
+{id:"m12",name:"12 吊人",loveU:"等待單戀不對等",loveR:"白等該放手",careerU:"停滯轉念",careerR:"白做工",suit:"major"},
+{id:"m13",name:"13 死神",loveU:"分手斷聯重生",loveR:"分不了藕斷絲連",careerU:"轉型離職結束",careerR:"不敢轉苟延",suit:"major"},
+{id:"m14",name:"14 節制",loveU:"遠距磨合加溫",loveR:"步調不合溝通差",careerU:"跨部門協調順",careerR:"資源失衡",suit:"major"},
+{id:"m15",name:"15 惡魔",loveU:"肉體綑綁毒性",loveR:"戒斷看清渣",careerU:"為錢留下被綁",careerR:"離職解脫",suit:"major"},
+{id:"m16",name:"16 高塔",loveU:"分手真相曝光",loveR:"假裝沒事內傷",careerU:"裁員危機倒塌",careerR:"驚險過關",suit:"major"},
+{id:"m17",name:"17 星星",loveU:"遠距新希望療傷",loveR:"失望單戀沒信心",careerU:"有名氣未來可期",careerR:"畫大餅",suit:"major"},
+{id:"m18",name:"18 月亮",loveU:"不安曖昧欺騙",loveR:"真相大白",careerU:"內幕小人想太多",careerR:"誤會解除",suit:"major"},
+{id:"m19",name:"19 太陽",loveU:"熱戀公開見家長",loveR:"假開心見光死",careerU:"成功升遷被看見",careerR:"驕傲成果被搶",suit:"major"},
+{id:"m20",name:"20 審判",loveU:"復合定下來",loveR:"復合失敗放不下",careerU:"被召回第二春",careerR:"錯失機會",suit:"major"},
+{id:"m21",name:"21 世界",loveU:"修成正果圓滿",loveR:"差一步同床異夢",careerU:"完成大案出國",careerR:"卡尾",suit:"major"},
+{id:"wA",name:"權杖A",loveU:"新戀主動追",loveR:"熱情熄",careerU:"新事業創業機會",careerR:"延遲",suit:"wands"},
+{id:"w2",name:"權杖二",loveU:"異地未來規劃",loveR:"安於現狀",careerU:"選方向等機會",careerR:"害怕選擇",suit:"wands"},
+{id:"w3",name:"權杖三",loveU:"遠距有發展",loveR:"等待落空",careerU:"拓展合作",careerR:"合作破裂",suit:"wands"},
+{id:"w4",name:"權杖四",loveU:"同居見家長穩定",loveR:"不和諧",careerU:"團隊慶功穩定",careerR:"不穩",suit:"wands"},
+{id:"w5",name:"權杖五",loveU:"競爭情敵吵架",loveR:"逃避",careerU:"內鬥搶業績",careerR:"內耗結束",suit:"wands"},
+{id:"w6",name:"權杖六",loveU:"被肯定公開放閃",loveR:"失敗沒認可",careerU:"成功升遷",careerR:"驕傲",suit:"wands"},
+{id:"w7",name:"權杖七",loveU:"捍衛感情不放手",loveR:"放棄被擊倒",careerU:"守住位置抗壓",careerR:"放棄",suit:"wands"},
+{id:"w8",name:"權杖八",loveU:"快速發展訊息多",loveR:"延誤",careerU:"進度超快出差",careerR:"停滯",suit:"wands"},
+{id:"w9",name:"權杖九",loveU:"受傷防備不信任",loveR:"筋疲力盡放下防備",careerU:"累但硬撐快成",careerR:"被壓垮",suit:"wands"},
+{id:"w10",name:"權杖十",loveU:"感情是負擔想分",loveR:"放下推卸",careerU:"過勞責任重",careerR:"被壓垮",suit:"wands"},
+{id:"wP",name:"權杖侍者",loveU:"熱情追求傳訊息",loveR:"三分鐘熱度",careerU:"有幹勁新人好消息",careerR:"衝動",suit:"wands"},
+{id:"wN",name:"權杖騎士",loveU:"熱烈追求來快去快",loveR:"魯莽",careerU:"衝刺行動派",careerR:"虎頭蛇尾",suit:"wands"},
+{id:"wQ",name:"權杖皇后",loveU:"有魅力主導",loveR:"善妒情緒化",careerU:"自信主管業績女王",careerR:"要求高",suit:"wands"},
+{id:"wK",name:"權杖國王",loveU:"大男人可靠主導",loveR:"獨裁暴躁",careerU:"創業老闆有遠見",careerR:"好高騖遠",suit:"wands"},
+{id:"cA",name:"聖杯A",loveU:"新戀心動被愛",loveR:"情感阻塞",careerU:"新合作有愛工作",careerR:"流失",suit:"cups"},
+{id:"c2",name:"聖杯二",loveU:"相愛交往靈魂伴侶",loveR:"失衡分手三角",careerU:"合作愉快",careerR:"拆夥",suit:"cups"},
+{id:"c3",name:"聖杯三",loveU:"姐妹聚會友變情",loveR:"過度享樂八卦",careerU:"團隊歡樂",careerR:"友情變質",suit:"cups"},
+{id:"c4",name:"聖杯四",loveU:"厭倦冷淡提不起勁",loveR:"抓住新機會",careerU:"職業倦怠看不上",careerR:"重新投入",suit:"cups"},
+{id:"c5",name:"聖杯五",loveU:"失戀後悔專注失去",loveR:"走出原諒",careerU:"失敗專注失去",careerR:"走出",suit:"cups"},
+{id:"c6",name:"聖杯六",loveU:"前任舊愛童年玩伴",loveR:"沉溺過去",careerU:"舊公司懷舊產業",careerR:"無法長大",suit:"cups"},
+{id:"c7",name:"聖杯七",loveU:"選擇多花心幻想",loveR:"做出選擇",careerU:"想法多不落地",careerR:"目標清晰",suit:"cups"},
+{id:"c8",name:"聖杯八",loveU:"離開追尋真愛分手",loveR:"徘徊害怕離開",careerU:"離職找意義",careerR:"不敢離",suit:"cups"},
+{id:"c9",name:"聖杯九",loveU:"願望成真被寵",loveR:"不滿足貪心",careerU:"夢想工作滿意",careerR:"願望落空",suit:"cups"},
+{id:"c10",name:"聖杯十",loveU:"完美家庭結婚幸福",loveR:"家庭失和破碎",careerU:"家族企業圓滿",careerR:"失和",suit:"cups"},
+{id:"cP",name:"聖杯侍者",loveU:"告白道歉浪漫邀約",loveR:"幼稚被利用",careerU:"創意新人好感客戶",careerR:"情緒化",suit:"cups"},
+{id:"cN",name:"聖杯騎士",loveU:"浪漫白馬王子",loveR:"花心不切實際",careerU:"邀約夢想工作",careerR:"情緒化",suit:"cups"},
+{id:"cQ",name:"聖杯皇后",loveU:"溫柔體貼好女友",loveR:"多愁敏感",careerU:"療癒需同理心",careerR:"過度敏感",suit:"cups"},
+{id:"cK",name:"聖杯國王",loveU:"暖男情緒穩定",loveR:"操控冷漠",careerU:"有愛心主管",careerR:"壓抑情感",suit:"cups"},
+{id:"sA",name:"寶劍A",loveU:"理性溝通斬爛桃花",loveR:"混亂濫用言語",careerU:"新想法突破企劃過",careerR:"受阻",suit:"swords"},
+{id:"s2",name:"寶劍二",loveU:"猶豫做不了決定",loveR:"做出決定謊言揭穿",careerU:"僵局需決策",careerR:"資訊多",suit:"swords"},
+{id:"s3",name:"寶劍三",loveU:"心碎小三分手",loveR:"療傷走出",careerU:"被背叛資遣心累",careerR:"壓抑痛苦",suit:"swords"},
+{id:"s4",name:"寶劍四",loveU:"冷靜期分房休息",loveR:"無法休息",careerU:"休假停工養精",careerR:"疲憊復原",suit:"swords"},
+{id:"s5",name:"寶劍五",loveU:"吵贏輸感情冷戰",loveR:"和解放下爭執",careerU:"辦公室鬥爭",careerR:"和解",suit:"swords"},
+{id:"s6",name:"寶劍六",loveU:"療傷搬家分手搬離",loveR:"卡過去無法前進",careerU:"轉部門過渡",careerR:"抗拒療癒",suit:"swords"},
+{id:"s7",name:"寶劍七",loveU:"偷吃隱瞞欺騙",loveR:"被抓包誠實",careerU:"策略摸魚被偷點子",careerR:"良心發現",suit:"swords"},
+{id:"s8",name:"寶劍八",loveU:"被困不敢分自我設限",loveR:"掙脫自我解放",careerU:"被綁無助",careerR:"看清真相",suit:"swords"},
+{id:"s9",name:"寶劍九",loveU:"焦慮失眠想太多",loveR:"噩夢結束",careerU:"壓力大內耗",careerR:"釋放焦慮",suit:"swords"},
+{id:"s10",name:"寶劍十",loveU:"徹底結束被傷透",loveR:"谷底反彈",careerU:"谷底結束裁員",careerR:"害怕結束",suit:"swords"},
+{id:"sP",name:"寶劍侍者",loveU:"監視查勤八卦",loveR:"八卦間諜",careerU:"打探消息學習期",careerR:"是非",suit:"swords"},
+{id:"sN",name:"寶劍騎士",loveU:"吵架快刀斬亂麻分手",loveR:"衝動傷人好鬥",careerU:"急進效率高得罪人",careerR:"魯莽",suit:"swords"},
+{id:"sQ",name:"寶劍皇后",loveU:"獨立單身貴族不好惹",loveR:"冷酷刻薄孤獨",careerU:"女強人理性",careerR:"過度批判",suit:"swords"},
+{id:"sK",name:"寶劍國王",loveU:"冷酷理性分手",loveR:"專制無情偏見",careerU:"律師顧問型主管",careerR:"濫用權力",suit:"swords"},
+{id:"pA",name:"錢幣A",loveU:"務實送禮結婚前提",loveR:"錯失損失貪婪",careerU:"新工作加薪投資",careerR:"損失",suit:"pentacles"},
+{id:"p2",name:"錢幣二",loveU:"忙沒空談平衡兩段",loveR:"失去平衡混亂",careerU:"兼職忙碌調資金",careerR:"忙不過來",suit:"pentacles"},
+{id:"p3",name:"錢幣三",loveU:"一起打拼合作進步",loveR:"缺乏合作技能不足",careerU:"團隊合作技術認可",careerR:"平庸",suit:"pentacles"},
+{id:"p4",name:"錢幣四",loveU:"吝嗇佔有慾強",loveR:"揮霍缺乏安全感",careerU:"守財死守職位",careerR:"貪心",suit:"pentacles"},
+{id:"p5",name:"錢幣五",loveU:"貧賤夫妻為錢吵架",loveR:"走出得到幫助",careerU:"財務危機失業",careerR:"好轉",suit:"pentacles"},
+{id:"p6",name:"錢幣六",loveU:"一方付出多不平衡",loveR:"不公平被利用",careerU:"加薪分紅貴人金援",careerR:"債務",suit:"pentacles"},
+{id:"p7",name:"錢幣七",loveU:"長期觀察慢熱等待",loveR:"投資失敗白費",careerU:"等收成長期投資",careerR:"急於求成",suit:"pentacles"},
+{id:"p8",name:"錢幣八",loveU:"一起努力磨合學相處",loveR:"敷衍倦怠",careerU:"努力學習工藝加班",careerR:"敷衍",suit:"pentacles"},
+{id:"p9",name:"錢幣九",loveU:"獨自美麗單身富足",loveR:"依賴財務不獨立",careerU:"獨立自僱財務自由",careerR:"揮霍",suit:"pentacles"},
+{id:"p10",name:"錢幣十",loveU:"門當戶對大家庭婚嫁",loveR:"家族糾紛短視",careerU:"家族企業穩定大公司",careerR:"失去傳承",suit:"pentacles"},
+{id:"pP",name:"錢幣侍者",loveU:"務實追求慢慢來",loveR:"懶散不切實際",careerU:"認真新人進修",careerR:"錯失學習",suit:"pentacles"},
+{id:"pN",name:"錢幣騎士",loveU:"慢熱可靠木頭型",loveR:"停滯過度保守無聊",careerU:"踏實慢但一定做到",careerR:"頑固",suit:"pentacles"},
+{id:"pQ",name:"錢幣皇后",loveU:"好太太會持家務實",loveR:"拜金守財失衡",careerU:"會管錢財務",careerR:"物質",suit:"pentacles"},
+{id:"pK",name:"錢幣國王",loveU:"有錢可靠大老闆型",loveR:"貪婪物質唯利是圖",careerU:"實業家老闆高薪",careerR:"固執",suit:"pentacles"}
+];
+const TAROT_SUITS={major:{label:"大阿爾克那"},wands:{label:"權杖 Wands"},cups:{label:"聖杯 Cups"},swords:{label:"寶劍 Swords"},pentacles:{label:"錢幣 Pentacles"}};
+function suitLabel(suit){return (TAROT_SUITS[suit]&&TAROT_SUITS[suit].label)||suit||'';}
+function validateTarotCount(){return TAROT_CARDS.length===78;}
+function validateTarotUnique(){return new Set(TAROT_CARDS.map(c=>c.id)).size===78;}
+function validateTarotSuitCounts(){
+const want={major:22,wands:14,cups:14,swords:14,pentacles:14};
+const got={major:0,wands:0,cups:0,swords:0,pentacles:0};
+TAROT_CARDS.forEach(c=>{if(got[c.suit]!==undefined) got[c.suit]++;});
+return {got,pass:Object.keys(want).every(k=>got[k]===want[k])};
+}
+function validateTarotFields(){
+return TAROT_CARDS.every(c=>typeof c.id==='string'&&c.id&&typeof c.name==='string'&&c.name&&typeof c.loveU==='string'&&typeof c.loveR==='string'&&typeof c.careerU==='string'&&typeof c.careerR==='string'&&['major','wands','cups','swords','pentacles'].includes(c.suit));
+}
+
+function binToStr(b){return b.join('');}
+function lineToYinYang(v){return {isYang:(v===7||v===9),isYin:(v===6||v===8),changing:(v===6||v===9),value:v};}
+function tossCoin(){return Math.random()<0.5?2:3;}
+function tossLine(){let s=0;for(let i=0;i<3;i++) s+=tossCoin();return s;}
+function castSixLines(){let a=[];for(let i=0;i<6;i++) a.push(tossLine());return a;}
+function linesToBits(lines){return lines.map(l=>lineToYinYang(l).isYang?1:0);}
+function getMoving(lines){let m=[];for(let i=0;i<6;i++) if(lineToYinYang(lines[i]).changing) m.push(i+1);return m;}
+function getPrimaryHexagram(bits){return HEX_MAP[binToStr(bits)]||null;}
+function getChangedHexagram(bits,lines){let c=bits.slice();for(let i=0;i<6;i++) if(lineToYinYang(lines[i]).changing) c[i]=c[i]?0:1;return HEX_MAP[binToStr(c)]||null;}
+function validateCount(){return HEXAGRAMS.length===64;}
+function validateSequence(){if(HEXAGRAMS.length!==64) return false;return HEXAGRAMS.every((h,i)=>h.n===i+1);}
+function validateUnique(){let s=new Set(HEXAGRAMS.map(h=>h.n));let b=new Set(HEXAGRAMS.map(h=>binToStr(h.bin)));return s.size===64&&b.size===64;}
+function validateTrigrams(){for(let h of HEXAGRAMS){let low=TRIGRAMS[h.low];let up=TRIGRAMS[h.up];if(!low||!up) return false;let exp=[...low,...up];for(let i=0;i<6;i++) if(exp[i]!==h.bin[i]) return false;}return true;}
+/* [FIX-1] 綜卦（上下顛倒）：64 卦中有 8 卦顛倒後為自身（乾坤頤大過坎離中孚小過），
+   因此「本卦-綜卦」去重後應為 28 組互綜 + 8 組自綜 = 36 個鍵，原程式期望 32 必然 FAIL */
+function validateMutual(){
+const keys=new Set();
+const selfList=[];
+let missing=0;
+for(let h of HEXAGRAMS){
+const cur=binToStr(h.bin);
+const rev=binToStr(h.bin.slice().reverse());
+if(!HEX_MAP[rev]){missing++;continue;}
+if(rev===cur) selfList.push(h.n);
+keys.add([cur,rev].sort().join('-'));
+}
+const selfCount=selfList.length;
+const crossPairs=keys.size-selfCount;
+return {keys:keys.size,crossPairs,selfCount,selfList,all64:missing===0,
+pass:missing===0&&selfCount===8&&crossPairs===28&&keys.size===36};
+}
+/* 錯卦（六爻全變）：不存在自錯卦，去重後應為 32 組 */
+function validateInverse(){
+const keys=new Set();
+const selfList=[];
+let missing=0;
+for(let h of HEXAGRAMS){
+const cur=binToStr(h.bin);
+const inv=binToStr(h.bin.map(b=>b?0:1));
+if(!HEX_MAP[inv]){missing++;continue;}
+if(inv===cur) selfList.push(h.n);
+keys.add([cur,inv].sort().join('-'));
+}
+return {keys:keys.size,selfCount:selfList.length,all64:missing===0,
+pass:missing===0&&selfList.length===0&&keys.size===32};
+}
+/* [ADD-1] 通行本卦序結構檢查：第 2k-1 與第 2k 卦必為綜卦；若該卦自綜，則為錯卦 */
+function validateKingWenPairs(){
+const bad=[];
+for(let i=0;i<HEXAGRAMS.length;i+=2){
+const a=HEXAGRAMS[i],b=HEXAGRAMS[i+1];
+if(!a||!b){bad.push(`${i+1}?`);continue;}
+const aStr=binToStr(a.bin);
+const rev=binToStr(a.bin.slice().reverse());
+const inv=binToStr(a.bin.map(x=>x?0:1));
+const bStr=binToStr(b.bin);
+const okRev=(rev!==aStr&&bStr===rev);
+const okInv=(rev===aStr&&bStr===inv);
+if(!okRev&&!okInv) bad.push(`${a.n}-${b.n}`);
+}
+return {badPairs:bad,pass:bad.length===0};
+}
+async function sha256(str){const buf=new TextEncoder().encode(str);const hash=await crypto.subtle.digest('SHA-256',buf);return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');}
+async function computeDataHash(){const canonical=JSON.stringify(HEXAGRAMS.map(h=>({n:h.n,bin:h.bin})));return await sha256(canonical);}
+let DATA_STATUS={source:"周易六十四卦名稱/卦序：外部參考（通行本卦序，未於本頁內驗證出處）",checkedAt:"",count:"",sequence:"",unique:"",trigram:"",mutual:"",inverse:"",kingwen:"",hash:"",hashVal:"",expected:BASELINE_HEXAGRAM_HASH,
+countPass:false,sequencePass:false,uniquePass:false,trigramPass:false,mutualPass:false,inversePass:false,kingwenPass:false,hashPass:false,hashChecked:false,
+tarotCount:"",tarotUnique:"",tarotSuits:"",tarotFields:"",tarotCountPass:false,tarotUniquePass:false,tarotSuitsPass:false,tarotFieldsPass:false};
+async function runValidation(){
+DATA_STATUS.checkedAt=new Date().toISOString().slice(0,10);
+DATA_STATUS.countPass=validateCount();
+DATA_STATUS.count=DATA_STATUS.countPass?"64/64 PASS":"FAIL";
+DATA_STATUS.sequencePass=validateSequence();
+DATA_STATUS.sequence=DATA_STATUS.sequencePass?"1→64 PASS":"FAIL";
+DATA_STATUS.uniquePass=validateUnique();
+DATA_STATUS.unique=DATA_STATUS.uniquePass?"編號唯一 64/64 二進位唯一 64/64 PASS":"FAIL";
+DATA_STATUS.trigramPass=validateTrigrams();
+DATA_STATUS.trigram=DATA_STATUS.trigramPass?"64/64 PASS":"FAIL";
+const mutual=validateMutual();
+const inverse=validateInverse();
+const kw=validateKingWenPairs();
+DATA_STATUS.mutual=`互綜 ${mutual.crossPairs}/28 對 · 自綜 ${mutual.selfCount}/8 卦（${mutual.selfList.join(',')}）· ${mutual.all64?'64/64 存在':'存在性 FAIL'} · ${mutual.pass?'PASS':'FAIL'}`;
+DATA_STATUS.inverse=`${inverse.keys}/32 對 · 自錯 ${inverse.selfCount}（應為0）· ${inverse.all64?'64/64 存在':'存在性 FAIL'} · ${inverse.pass?'PASS':'FAIL'}`;
+DATA_STATUS.kingwen=kw.pass?"32/32 對 PASS":`FAIL（${kw.badPairs.join(' ')}）`;
+DATA_STATUS.mutualPass=mutual.pass;
+DATA_STATUS.inversePass=inverse.pass;
+DATA_STATUS.kingwenPass=kw.pass;
+DATA_STATUS.tarotCountPass=validateTarotCount();
+DATA_STATUS.tarotCount=DATA_STATUS.tarotCountPass?`${TAROT_CARDS.length}/78 PASS`:`FAIL（實際 ${TAROT_CARDS.length} 張）`;
+DATA_STATUS.tarotUniquePass=validateTarotUnique();
+DATA_STATUS.tarotUnique=DATA_STATUS.tarotUniquePass?"id 唯一 PASS":"FAIL";
+const tSuits=validateTarotSuitCounts();
+DATA_STATUS.tarotSuitsPass=tSuits.pass;
+DATA_STATUS.tarotSuits=`大阿爾克那${tSuits.got.major}/22 權杖${tSuits.got.wands}/14 聖杯${tSuits.got.cups}/14 寶劍${tSuits.got.swords}/14 錢幣${tSuits.got.pentacles}/14 · ${tSuits.pass?'PASS':'FAIL'}`;
+DATA_STATUS.tarotFieldsPass=validateTarotFields();
+DATA_STATUS.tarotFields=DATA_STATUS.tarotFieldsPass?"每張卡 loveU/loveR/careerU/careerR/suit 齊全 PASS":"FAIL";
+/* [FIX-10] 非安全來源（file:// 或 http://）時 crypto.subtle 為 undefined，
+   原本會擲出例外並中斷初始化 IIFE，導致子分類、專案下拉、紀錄數皆不渲染 */
+try{
+const actual=await computeDataHash();
+DATA_STATUS.hashVal=actual;
+DATA_STATUS.hashChecked=true;
+DATA_STATUS.hashPass=(actual===BASELINE_HEXAGRAM_HASH);
+DATA_STATUS.hash=DATA_STATUS.hashPass?"PASS":"UNVERIFIED";
+}catch(e){
+console.warn('SHA-256 unavailable:',e);
+DATA_STATUS.hashVal="";
+DATA_STATUS.hashChecked=false;
+DATA_STATUS.hashPass=false;
+DATA_STATUS.hash="UNAVAILABLE（此環境不提供 crypto.subtle，請以 https 或 localhost 開啟）";
+}
+renderStatus();
+return DATA_STATUS;
+}
+/* [FIX-12] 原本沒有 catch：若未來新增的驗證項目擲出例外，Promise rejection
+   會讓 validationOut 完全不更新，使用者按了按鈕卻看不到任何回應。 */
+async function rerunValidationUI(){
+const out=document.getElementById('validationOut');
+try{
+await runValidation();
+out.innerHTML=buildDetailReport();
+}catch(e){
+console.error('rerunValidationUI failed',e);
+out.textContent='驗證執行失敗：'+(e&&e.message?e.message:String(e))+'\n（其餘畫面狀態未變動，可重新整理頁面後再試）';
+}
+}
+/* [UI-1] 主畫面原本直接塞入完整驗證明細（來源／筆數／卦序／綜卦／錯卦／卦序配對／Hash 全部展開），
+   改為只顯示一行狀態；完整明細移到 buildDetailReport()，由設定頁「重跑本地驗證」按需顯示，
+   並整理成 README.md 供人工核對，不在主畫面常駐。*/
+function structuralPass(){
+return DATA_STATUS.countPass&&DATA_STATUS.sequencePass&&DATA_STATUS.uniquePass&&DATA_STATUS.trigramPass&&DATA_STATUS.mutualPass&&DATA_STATUS.inversePass&&DATA_STATUS.kingwenPass&&DATA_STATUS.tarotCountPass&&DATA_STATUS.tarotUniquePass&&DATA_STATUS.tarotSuitsPass&&DATA_STATUS.tarotFieldsPass;
+}
+function buildDetailReport(){
+return `本地驗證：<br>來源：${escapeHTML(DATA_STATUS.source)}<br>筆數：${DATA_STATUS.count} · 卦序：${DATA_STATUS.sequence} · ${DATA_STATUS.unique}<br>八卦組成：${DATA_STATUS.trigram}<br>綜卦：${DATA_STATUS.mutual}<br>錯卦：${DATA_STATUS.inverse}<br>卦序配對（2k-1 與 2k 互為綜或錯）：${DATA_STATUS.kingwen}<br>Hash 計算（canonical HEXAGRAMS n+bin）：${DATA_STATUS.hashVal?DATA_STATUS.hashVal.slice(0,16)+"…":""}<br>Hash 比對：${DATA_STATUS.hash}${DATA_STATUS.hashChecked?'（僅證明與預先固定基準一致，非證明基準本身正確）':''} expected ${DATA_STATUS.expected.slice(0,16)}…<br>checkedAt：${DATA_STATUS.checkedAt||"尚未檢查"}<br><span class="small">說明：Hash PASS 表示本地資料與預先固定的基準資料完全一致（基準本身是否正確屬於 provenance 層，需另行核對），UNVERIFIED 表示可產生 Hash 但與預期不一致，UNAVAILABLE 表示此環境無法計算 Hash</span><br><br>塔羅資料（來源：使用者提供，未於本頁內驗證出處）：<br>筆數：${DATA_STATUS.tarotCount} · ${DATA_STATUS.tarotUnique}<br>花色分布：${DATA_STATUS.tarotSuits}<br>欄位完整性：${DATA_STATUS.tarotFields}<br><span class="small">說明：僅檢查資料結構是否完整、花色數量是否為標準 78 張配置，不檢查每張牌的解讀文字是否符合傳統塔羅定義</span>`;
+}
+function renderStatus(){
+const structOk=structuralPass();
+const header=document.getElementById('dataStatus');
+if(header){
+let line=structOk?'資料驗證：PASS · 64 卦資料結構正常':'資料驗證：FAIL · 詳見設定頁';
+if(structOk&&DATA_STATUS.checkedAt&&!DATA_STATUS.hashPass){
+line+=DATA_STATUS.hashChecked?'（Hash 比對 UNVERIFIED，詳見設定頁）':'（Hash 未計算，詳見設定頁）';
+}
+header.textContent=line;
+}
+const settingsShort=document.getElementById('dataStatusSettings');
+if(settingsShort){
+settingsShort.innerHTML=`結構驗證（易經 64 卦 + 塔羅 78 張）：<b style="color:${structOk?'var(--ok)':'var(--bad)'}">${structOk?'PASS':'FAIL'}</b><br>Hash 比對（易經資料表）：<b style="color:${DATA_STATUS.hashPass?'var(--ok)':(DATA_STATUS.hashChecked?'var(--warn)':'var(--warn)')}">${escapeHTML(DATA_STATUS.hash||'尚未檢查')}</b><br>最後檢查：${escapeHTML(DATA_STATUS.checkedAt||'尚未檢查')}<br><span class="small">完整逐項報告：點下方「重跑本地驗證」，或見 README.md「Local Validation」章節</span>`;
+}
+document.getElementById('appVer').textContent=APP_VERSION;
+document.getElementById('storageInfo').textContent=RECORDS_KEY;
+}
+function genId(){try{return `oracle_${crypto.randomUUID()}`;}catch(e){return `oracle_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;}}
+const VALID_STATUS=['pending','partial','ok','fail','insuf'];
+function statusClass(s){return VALID_STATUS.includes(s)?s:'pending';}
+function statusLabel(s){return VALID_STATUS.includes(s)?s:String(s)+'（未知狀態）';}
+/* [FIX-4] 結構檢查不再因 status 不在白名單而丟棄整筆紀錄，避免既有資料永久遺失 */
+/* [P3-FIX] 原本的結構檢查寫死要求 primary.bin（6 元素二進位陣列）與 lines（6 元素爻值陣列），
+   這兩個欄位是易經專屬。塔羅紀錄的 primary 只有 {name, sym}，沒有 bin/lines——
+   若不修正，每一筆塔羅紀錄存檔後，下一次 loadRecords()（例如 saveRecords 內的 updateCount）
+   就會判定其「結構不符」，移入隔離區，UI 當下雖仍顯示，但實際上沒有被正常保存，
+   重新整理頁面或切換到「紀錄」「脈絡」都會找不到這筆紀錄。 */
+function isValidRecord(r){
+if(!r||typeof r!=='object') return false;
+if(typeof r.id!=='string') return false;
+if(typeof r.question!=='string') return false;
+if(!Array.isArray(r.movingLines)) return false;
+if(!Array.isArray(r.realityChecks)) return false;
+for(let c of r.realityChecks){
+if(!c||typeof c!=='object') return false;
+if(typeof c.event!=='string') return false;
+}
+if(r.system==='tarot'){
+if(!r.card||typeof r.card!=='object') return false;
+if(typeof r.card.id!=='string'||typeof r.card.name!=='string') return false;
+if(r.card.orientation!=='upright'&&r.card.orientation!=='reversed') return false;
+if(!r.primary||typeof r.primary.name!=='string') return false;
+return true;
+}
+/* 非塔羅：視為易經紀錄（含舊資料沒有 system 欄位的情況），維持原本檢查 */
+if(!r.primary||!Array.isArray(r.primary.bin)||r.primary.bin.length!==6) return false;
+if(!Array.isArray(r.lines)||r.lines.length!==6) return false;
+if(r.changed!==null&&r.changed!==undefined&&(typeof r.changed!=='object'||!Array.isArray(r.changed.bin))) return false;
+return true;
+}
+/* [FIX-11] 舊行為：loadRecords 過濾掉結構不符的紀錄後，任何一次 saveRecords 都會把
+   那些紀錄永久覆蓋。改為：過濾出來的紀錄先寫入隔離區（QUARANTINE_KEY），
+   JSON 無法解析時把原始字串備份到 CORRUPT_BACKUP_KEY，兩者都不會被一般儲存覆蓋。 */
+function setWarn(msg){
+const el=document.getElementById('corruptWarn');
+if(!el) return;
+if(msg){el.style.display='inline-block';el.textContent=msg;}
+else{el.style.display='none';}
+}
+function getQuarantine(){
+try{const raw=localStorage.getItem(QUARANTINE_KEY);const p=raw?JSON.parse(raw):[];return Array.isArray(p)?p:[];}
+catch(e){console.error('quarantine unreadable',e);return [];}
+}
+function quarantineRecords(items){
+try{
+const list=getQuarantine();
+const seen=new Set(list.map(x=>{try{return JSON.stringify(x&&x.raw);}catch(e){return '';}}));
+const now=new Date().toISOString();
+items.forEach(it=>{
+let k;try{k=JSON.stringify(it);}catch(e){k=String(it);}
+if(!seen.has(k)){seen.add(k);list.push({quarantinedAt:now,raw:it});}
+});
+localStorage.setItem(QUARANTINE_KEY,JSON.stringify(list));
+return list.length;
+}catch(e){console.error('quarantine failed',e);return -1;}
+}
+function listCorruptBackups(){
+const out=[];
+try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf(CORRUPT_BACKUP_KEY)===0) out.push(k);}}catch(e){console.error(e);}
+return out;
+}
+/* [FIX-11b] 舊版用 corruptBackupDone 布林值，導致第一份壞 JSON 備份後，
+   同一頁生命週期內任何後續壞 JSON（即使內容不同）都直接 return、不會備份。
+   改為以內容判斷：同一份內容只備份一次（比對 CORRUPT_BACKUP_KEY 及所有
+   timestamp 備份 key 的既有內容），內容不同則另開 timestamp key。 */
+const corruptBackupSeen=new Set();
+function backupCorruptRaw(raw){
+if(raw===null||raw===undefined) return;
+if(corruptBackupSeen.has(raw)) return;
+try{
+const first=localStorage.getItem(CORRUPT_BACKUP_KEY);
+if(first===null){
+localStorage.setItem(CORRUPT_BACKUP_KEY,raw);
+}else if(first!==raw){
+const alreadyStored=listCorruptBackups().some(k=>localStorage.getItem(k)===raw);
+if(!alreadyStored) localStorage.setItem(CORRUPT_BACKUP_KEY+'_'+Date.now(),raw);
+}
+corruptBackupSeen.add(raw);
+}catch(e){console.error('corrupt backup failed',e);}
+}
+function loadRecords(){
+let raw=null;
+try{
+raw=localStorage.getItem(RECORDS_KEY);
+if(!raw){setWarn('');return [];}
+const parsed=JSON.parse(raw);
+if(!Array.isArray(parsed)){throw new Error('not array');}
+const valid=[],invalid=[];
+parsed.forEach(r=>{(isValidRecord(r)?valid:invalid).push(r);});
+if(invalid.length){
+console.warn(`Filtered ${invalid.length} invalid records`);
+const total=quarantineRecords(invalid);
+setWarn(total>=0
+?`⚠ ${invalid.length} 筆結構不符已移入隔離區（共 ${total} 筆），不會被後續儲存覆蓋`
+:`⚠ ${invalid.length} 筆結構不符，且隔離區寫入失敗，請勿再新增紀錄以免覆蓋`);
+}else{setWarn('');}
+return valid;
+}catch(e){
+console.error("Records JSON corrupted",e);
+backupCorruptRaw(raw);
+setWarn('⚠ 本機紀錄無法解析，原始字串已備份（見設定頁），本次讀取視為空陣列');
+return [];
+}
+}
+function saveRecords(arr){
+try{
+localStorage.setItem(RECORDS_KEY,JSON.stringify(arr));
+updateCount();
+return true;
+}catch(e){
+console.error(e);
+if(e.name==='QuotaExceededError'||e.code===22) alert('儲存失敗：瀏覽器本機儲存空間已滿，請刪除部分紀錄');
+else alert('儲存失敗：'+e.message);
+return false;
+}
+}
+/* [FIX-7] 將 currentRecord 寫回本機；找不到或寫入失敗時回傳 false，由呼叫端回復狀態 */
+function persistCurrent(){
+if(!currentRecord) return false;
+const recs=loadRecords();
+const idx=recs.findIndex(x=>x.id===currentRecord.id);
+if(idx<0){alert('儲存失敗：本機找不到此筆紀錄（可能已被刪除）');return false;}
+recs[idx]=currentRecord;
+return saveRecords(recs);
+}
+function updateCount(){const el=document.getElementById('recordCount');if(el) el.textContent=loadRecords().length+" 則紀錄";}
+let currentView='oracle';let currentSystem='yijing';let currentCat='work';let currentSub='求職';let currentRecord=null;let currentContextProject='all';
+const subMap={work:["求職","面試","職場","職涯","專案","能力累積","轉職","自訂"],love:["戀愛","關係","復合","相處"],study:["考試","學習","研究","技能"],other:["財務","旅行","人際","決策","自訂"]};
+function switchView(v){
+currentView=v;
+document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===v));
+['oracle','context','records','settings'].forEach(id=>document.getElementById('view-'+id).classList.toggle('hidden',id!==v));
+if(v==='context'){renderTimeline();renderContextAnalysis();}
+if(v==='records') renderAllRecords();
+if(v==='settings') renderQuarantineInfo();
+}
+function onContextProjectChange(v){
+currentContextProject=v;
+renderTimeline();
+renderContextAnalysis();
+}
+function initContextProjectSel(){
+const sel=document.getElementById('contextProjectSel');if(!sel) return;
+sel.innerHTML='';
+const optAll=document.createElement('option');optAll.value='all';optAll.textContent='全部專案';sel.appendChild(optAll);
+Object.values(PROJECTS).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;sel.appendChild(o);});
+sel.value=currentContextProject;
+}
+function renderQuarantineInfo(){
+const el=document.getElementById('quarantineInfo');if(!el) return;
+const q=getQuarantine();
+const backups=listCorruptBackups();
+el.textContent=`隔離紀錄：${q.length} 筆（key：${QUARANTINE_KEY}）\n無法解析備份：${backups.length} 筆（${backups.join('、')||'無'}）\n最後隔離時間：${q.length?fmtTime(q[q.length-1].quarantinedAt):'無'}`;
+}
+function copyQuarantine(){
+const q=getQuarantine();
+const backups=listCorruptBackups();
+if(!q.length&&!backups.length){alert('隔離區目前沒有資料');return;}
+const payload={quarantine:q,corruptBackups:backups.map(k=>({key:k,raw:localStorage.getItem(k)}))};
+copyText(JSON.stringify(payload,null,2),'已複製隔離區 JSON');
+}
+function clearQuarantine(){
+if(!confirm('清除隔離區與無法解析備份？此動作不可復原')) return;
+if(!confirm('二次確認：這是這些資料目前唯一的保存位置')) return;
+try{
+localStorage.removeItem(QUARANTINE_KEY);
+listCorruptBackups().forEach(k=>localStorage.removeItem(k));
+}catch(e){alert('清除失敗：'+e.message);return;}
+corruptBackupSeen.clear();
+renderQuarantineInfo();
+alert('已清除隔離區');
+}
+/* [P3] 塔羅：'daily'（每日指引）仍未實作，維持原本的提示攔截；'tarot' 開放使用。
+   drawButtonLabel/drawMethodInfoText 依 currentSystem 切換主按鈕文字與抽取方式說明，
+   updateDrawUI() 統一套用，在 switchSystem() 與頁面初始化時呼叫。 */
+function drawButtonLabel(){return currentSystem==='tarot'?'抽取塔羅 · 單張抽牌':'抽取占卜 · 三枚銅錢法';}
+function drawMethodInfoText(){return currentSystem==='tarot'?'單張抽取 · 正位/逆位各 50%':'三枚銅錢法 6:1/8 7:3/8 8:3/8 9:1/8';}
+function updateDrawUI(){
+const btn=document.getElementById('divineBtn');if(btn) btn.textContent=drawButtonLabel();
+const info=document.getElementById('drawMethodInfo');if(info) info.textContent=drawMethodInfoText();
+}
+function switchSystem(s){
+if(s==='daily'){alert('目前版本僅完成易經64與塔羅78，每日指引建置中');return;}
+if(s!=='yijing'&&s!=='tarot'){return;}
+currentSystem=s;
+document.querySelectorAll('#systemTabs [data-system]').forEach(el=>el.classList.toggle('active',el.dataset.system===s));
+document.getElementById('resultBox').classList.add('hidden');
+currentRecord=null;
+updateDrawUI();
+}
+function setCat(c){currentCat=c;showingCustomSubInput=false;document.querySelectorAll('[data-cat]').forEach(el=>el.classList.toggle('active',el.dataset.cat===c));renderSubCats();}
+/* [P1] 自訂子分類：使用者輸入不寫回 subMap（避免污染內建資料），
+   另存於 localStorage（CUSTOM_SUBCATS_KEY），依分類（work/love/study/other）分別存陣列。
+   驗證：trim 後不得為空、長度上限 CUSTOM_SUB_MAX_LEN、不得與現有（內建或自訂）重複。
+   渲染一律用 escapeHTML 或 DOM textContent（本函式用 button.textContent），不會有 HTML injection 風險。 */
+function loadCustomSubcats(){
+try{
+const raw=localStorage.getItem(CUSTOM_SUBCATS_KEY);
+if(!raw) return {};
+const parsed=JSON.parse(raw);
+if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)) return {};
+const out={};
+Object.keys(subMap).forEach(cat=>{
+const arr=parsed[cat];
+out[cat]=Array.isArray(arr)?arr.filter(s=>typeof s==='string'&&s.trim().length>0&&s.trim().length<=CUSTOM_SUB_MAX_LEN).map(s=>s.trim()):[];
+});
+return out;
+}catch(e){console.error('custom subcats unreadable',e);return {};}
+}
+function saveCustomSubcats(obj){
+try{localStorage.setItem(CUSTOM_SUBCATS_KEY,JSON.stringify(obj));return true;}
+catch(e){console.error('save custom subcats failed',e);alert('儲存自訂分類失敗：'+e.message);return false;}
+}
+let showingCustomSubInput=false;
+function toggleCustomSubInput(){
+showingCustomSubInput=!showingCustomSubInput;
+renderSubCats();
+if(showingCustomSubInput){
+const inp=document.getElementById('customSubText');
+if(inp){inp.value='';inp.focus();}
+}
+}
+function cancelCustomSub(){
+showingCustomSubInput=false;
+renderSubCats();
+}
+function confirmCustomSub(){
+const inp=document.getElementById('customSubText');if(!inp) return;
+const val=inp.value.trim();
+if(!val){alert('請輸入分類名稱');return;}
+if(val.length>CUSTOM_SUB_MAX_LEN){alert(`分類名稱過長（上限 ${CUSTOM_SUB_MAX_LEN} 字，目前 ${val.length} 字）`);return;}
+const predefined=(subMap[currentCat]||[]).filter(s=>s!=='自訂');
+const all=loadCustomSubcats();
+const existingCustom=all[currentCat]||[];
+if(predefined.includes(val)||existingCustom.includes(val)){
+/* 重複：不重複新增，直接視為選取既有分類 */
+currentSub=val;
+showingCustomSubInput=false;
+renderSubCats();
+return;
+}
+existingCustom.push(val);
+all[currentCat]=existingCustom;
+if(!saveCustomSubcats(all)) return;
+currentSub=val;
+showingCustomSubInput=false;
+renderSubCats();
+}
+function renderSubCats(){
+const cont=document.getElementById('subCats');cont.innerHTML='';
+const predefined=(subMap[currentCat]||[]).filter(s=>s!=='自訂');
+const custom=loadCustomSubcats()[currentCat]||[];
+[...predefined,...custom].forEach(sub=>{
+const b=document.createElement('button');b.className='tab'+(sub===currentSub?' active':'');b.textContent=sub;b.onclick=()=>{currentSub=sub;showingCustomSubInput=false;renderSubCats();};cont.appendChild(b);
+});
+const addBtn=document.createElement('button');addBtn.className='tab'+(showingCustomSubInput?' active':'');addBtn.textContent='自訂';addBtn.onclick=()=>toggleCustomSubInput();cont.appendChild(addBtn);
+const inputRow=document.getElementById('customSubInput');
+if(inputRow) inputRow.style.display=showingCustomSubInput?'flex':'none';
+}
+function initProjects(){
+const sel=document.getElementById('projectSel');sel.innerHTML='';
+Object.values(PROJECTS).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;sel.appendChild(o);});
+}
+/* [FIX-6] 剪貼簿：主要用 navigator.clipboard，失敗改 execCommand，再失敗顯示手動複製區 */
+function showManualCopy(txt){
+const box=document.getElementById('manualCopyBox');
+const ta=document.getElementById('manualCopyText');
+ta.value=txt;
+box.classList.remove('hidden');
+box.scrollIntoView({behavior:'smooth',block:'center'});
+ta.focus();ta.select();
+}
+async function copyText(txt,okMsg){
+try{
+if(navigator.clipboard&&window.isSecureContext){
+await navigator.clipboard.writeText(txt);
+alert(okMsg);
+return true;
+}
+throw new Error('clipboard API 不可用');
+}catch(e){
+try{
+const ta=document.createElement('textarea');
+ta.value=txt;ta.setAttribute('readonly','');
+ta.style.position='fixed';ta.style.top='-1000px';
+document.body.appendChild(ta);ta.select();
+const ok=document.execCommand('copy');
+document.body.removeChild(ta);
+if(ok){alert(okMsg+'（備援複製）');return true;}
+throw new Error('execCommand 失敗');
+}catch(e2){
+console.error('copy failed',e,e2);
+showManualCopy(txt);
+return false;
+}
+}
+}
+/* [P3] doDivine() 現在是路由：依 currentSystem 分派到 doDivineYijing() 或 doDivineTarot()。
+   易經流程完全沿用原本邏輯，只是把函式名稱從 doDivine 改為 doDivineYijing。 */
+function doDivine(){
+if(currentSystem==='tarot'){doDivineTarot();return;}
+doDivineYijing();
+}
+function doDivineYijing(){
+const btn=document.getElementById('divineBtn');
+const q=document.getElementById('qInput').value.trim();
+if(!q){alert('請輸入問題（避免真實姓名）');return;}
+btn.disabled=true;btn.textContent='抽取中...';
+setTimeout(()=>{
+try{
+const lines=castSixLines();
+const bits=linesToBits(lines);
+const primary=getPrimaryHexagram(bits);
+const moving=getMoving(lines);
+const changed=moving.length?getChangedHexagram(bits,lines):null;
+if(!primary){alert('卦象 lookup 失敗：二進位 '+binToStr(bits)+' 不在資料表中');return;}
+const id=genId();
+const project=document.getElementById('projectSel').value;
+const createdAt=new Date().toISOString(); /* [FIX-9] 單一時間戳 */
+const record={
+schemaVersion:1,
+id,
+createdAt,
+question:q,
+category:currentCat,
+subcategory:currentSub,
+projectId:project,
+system:currentSystem,
+lines,
+bits,
+primary,
+changed,
+movingLines:moving,
+originalDivinationData:{question:q,system:currentSystem,lines,bits,primary,changed,movingLines:moving,createdAt},
+originalInterpretation:`${primary.name} ${primary.sym} 上${primary.up}下${primary.low}。${moving.length?'動爻：'+moving.join('、')+' 之卦 '+(changed?changed.name:'（查表失敗）'):'無動爻'}。此為象徵解讀，非事實預測。`,
+realityChecks:[]
+};
+let recs=loadRecords();recs.unshift(record);
+if(saveRecords(recs)){
+currentRecord=record;
+renderResult(record);
+document.getElementById('lastInfo').textContent=`已抽取：${primary.name} ${primary.sym} ${moving.length&&changed?'→ '+changed.name:'無變卦'} · ${fmtTime(createdAt)}`;
+}
+}finally{btn.disabled=false;btn.textContent=drawButtonLabel();}
+},100);
+}
+/* [P3] 塔羅抽牌：單張、正位/逆位各 50%（Math.random()<0.5，與易經銅錢法同一亂數來源，
+   同樣未使用密碼學亂數，維持與 Yi Jing 一致的假設，未另外聲稱更高強度）。
+   解讀模式（感情/事業）依目前選取的「分類」決定：category==='love' 時用 loveU/loveR，
+   其餘分類（work/study/other）一律對應資料裡的 careerU/careerR 欄位——
+   這是本頁自訂的簡化對應，資料本身只有「感情」「事業」兩組欄位，不是四個分類各自獨立的內容，
+   這個假設寫在這裡供之後查核，不是使用者已確認的事實。 */
+function doDivineTarot(){
+const btn=document.getElementById('divineBtn');
+const q=document.getElementById('qInput').value.trim();
+if(!q){alert('請輸入問題（避免真實姓名）');return;}
+btn.disabled=true;btn.textContent='抽取中...';
+setTimeout(()=>{
+try{
+const idx=Math.floor(Math.random()*TAROT_CARDS.length);
+const card=TAROT_CARDS[idx];
+if(!card){alert('抽牌失敗：資料表索引異常');return;}
+const orientation=Math.random()<0.5?'upright':'reversed';
+const orientationLabel=orientation==='upright'?'正位':'逆位';
+const modeKey=currentCat==='love'?'love':'career';
+const modeLabel=modeKey==='love'?'感情':'事業';
+const meaning=orientation==='upright'?(modeKey==='love'?card.loveU:card.careerU):(modeKey==='love'?card.loveR:card.careerR);
+const id=genId();
+const project=document.getElementById('projectSel').value;
+const createdAt=new Date().toISOString();
+const record={
+schemaVersion:1,
+id,
+createdAt,
+question:q,
+category:currentCat,
+subcategory:currentSub,
+projectId:project,
+system:'tarot',
+card:{id:card.id,name:card.name,suit:card.suit,orientation,orientationLabel,mode:modeKey,modeLabel,meaning},
+primary:{name:`${card.name}（${orientationLabel}）`,sym:orientation==='upright'?'☉':'⟲'},
+changed:null,
+movingLines:[],
+originalDivinationData:{question:q,system:'tarot',card:{id:card.id,name:card.name,suit:card.suit},orientation,mode:modeKey,createdAt},
+originalInterpretation:`${card.name}（${orientationLabel}）· ${suitLabel(card.suit)} · 解讀模式：${modeLabel}。${meaning}。此為象徵解讀，非事實預測。`,
+realityChecks:[]
+};
+let recs=loadRecords();recs.unshift(record);
+if(saveRecords(recs)){
+currentRecord=record;
+renderResult(record);
+document.getElementById('lastInfo').textContent=`已抽取：${card.name} ${orientationLabel} · ${fmtTime(createdAt)}`;
+}
+}finally{btn.disabled=false;btn.textContent=drawButtonLabel();}
+},100);
+}
+/* [P3] 起卦結果卡片的標題與細節區塊依 system 分流：易經維持原本的本卦/爻值/動爻/之卦；
+   塔羅顯示卡牌名稱、正逆位、花色、解讀模式。抽出成獨立函式避免 renderResult 內堆疊三元判斷。 */
+function resultTitle(r){return r.system==='tarot'?'Oracle 抽牌結果｜建立後不提供編輯':'Oracle 起卦結果｜建立後不提供編輯';}
+function resultDetailHTML(r){
+if(r.system==='tarot'&&r.card){
+return `卡牌：${escapeHTML(r.card.name)}（${escapeHTML(r.card.orientationLabel)}） ${escapeHTML(r.primary.sym)}<br>花色：${escapeHTML(suitLabel(r.card.suit))}<br>解讀模式：${escapeHTML(r.card.modeLabel)}（依目前選取的分類「${escapeHTML(r.category)}」對應，非使用者另外指定）`;
+}
+return `本卦：${escapeHTML(r.primary.name)} ${escapeHTML(r.primary.sym)}<br>爻值：${escapeHTML(r.lines.join(','))} 6=老陰（動） 7=少陽 8=少陰 9=老陽（動）<br>${r.movingLines.length?'動爻：'+escapeHTML(r.movingLines.join('、'))+' 之卦：'+(r.changed?escapeHTML(r.changed.name)+' '+escapeHTML(r.changed.sym):'（資料缺失）'):'無動爻'}`;
+}
+function renderResult(r){
+const box=document.getElementById('resultBox');box.classList.remove('hidden');
+const qEsc=escapeHTML(r.question);
+box.innerHTML=`
+<h2>${qEsc}</h2>
+<p class="small" style="margin-top:4px">分類：${escapeHTML(r.category)}/${escapeHTML(r.subcategory)} · ${escapeHTML(fmtTime(r.createdAt))}</p>
+<div class="grid2" style="margin-top:16px">
+<div class="card-sub">
+<p class="content" style="font-weight:700;color:var(--gold)">${resultTitle(r)}</p>
+<p class="content" style="margin-top:8px">${escapeHTML(r.originalInterpretation)}</p>
+<p class="small" style="margin-top:8px">${resultDetailHTML(r)}</p>
+</div>
+<div class="card-sub">
+<p class="content" style="font-weight:700">Reality Check（使用者自行記錄，系統不驗證真實性）</p>
+<div id="rcList"></div>
+<div style="margin-top:12px">
+<select id="rcStatus"><option value="pending">尚未發生</option><option value="partial">部分符合</option><option value="ok">明確符合</option><option value="fail">明確不符合</option><option value="insuf">證據不足</option></select>
+<textarea id="rcEvent" placeholder="實際事件" style="margin-top:8px;height:60px"></textarea>
+<textarea id="rcEvidence" placeholder="證據備註（使用者自行記錄，系統不驗證真實性）" style="margin-top:8px;height:60px"></textarea>
+<button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="addRealityCheck()">新增 Reality Check</button>
+</div>
+</div>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+<button class="btn btn-gold" onclick="copyPromptCurrent()">複製為 LLM Prompt（基於目前結果）</button>
+<button class="btn btn-ghost" onclick="copyTimelinePrompt()">複製整條脈絡為AI分析 Prompt</button>
+<button class="btn btn-ghost" onclick="togglePromptPreview()">預覽 Prompt 內容</button>
+<button class="btn btn-ghost" onclick="deleteCurrent()">刪除此筆</button>
+</div>
+<div class="card-sub mono hidden" style="margin-top:16px;background:#0f0f23" id="promptPreview"></div>
+`;
+renderRCList(r);
+updatePromptPreview(r);
+}
+function renderRCList(r){
+const cont=document.getElementById('rcList');if(!cont) return;
+if(!r.realityChecks.length){cont.innerHTML='<p class="small">尚未有驗證</p>';return;}
+/* [FIX-3] 原本讀 c.checkedAt（不存在）→ 顯示 Invalid Date；改讀 c.createdAt */
+cont.innerHTML=r.realityChecks.map((c,idx)=>`
+<div style="border-top:1px solid var(--border);padding:8px 0">
+<span class="status status-${escapeHTML(statusClass(c.status))}"></span><span class="small">${escapeHTML(statusLabel(c.status))} · ${escapeHTML(fmtTime(c.createdAt||c.checkedAt))}${c.updatedAt?' · 更新 '+escapeHTML(fmtTime(c.updatedAt)):''}</span>
+<button class="small" style="float:right;margin-left:6px" onclick="editRC(${idx})">編輯</button>
+<button class="small" style="float:right" onclick="delRC(${idx})">刪除</button><br>
+<span class="content">${escapeHTML(c.event||'')}</span><br>
+<span class="small">備註：${escapeHTML(c.evidence||'')}</span>
+</div>
+`).join('');
+}
+function addRealityCheck(){
+if(!currentRecord) return;
+const status=document.getElementById('rcStatus').value;
+const event=document.getElementById('rcEvent').value.trim();
+const evidence=document.getElementById('rcEvidence').value.trim();
+if(!event){alert('請輸入實際事件');return;}
+const now=new Date().toISOString();
+const rc={id:genId(),createdAt:now,updatedAt:now,status,event,evidence};
+currentRecord.realityChecks.push(rc);
+if(!persistCurrent()){currentRecord.realityChecks.pop();return;}
+renderRCList(currentRecord);
+document.getElementById('rcEvent').value='';document.getElementById('rcEvidence').value='';
+}
+/* [FIX-4] status 白名單；輸入不合法即中止，不寫入 */
+function editRC(i){
+if(!currentRecord) return;
+const c=currentRecord.realityChecks[i];if(!c) return;
+const ne=prompt('編輯事件',c.event);if(ne===null) return;
+const nev=prompt('編輯備註',c.evidence||'');if(nev===null) return;
+const ns=prompt('狀態（'+VALID_STATUS.join(' / ')+'）',VALID_STATUS.includes(c.status)?c.status:'pending');if(ns===null) return;
+const nsTrim=ns.trim();
+if(!VALID_STATUS.includes(nsTrim)){alert('狀態必須是：'+VALID_STATUS.join(' / ')+'，本次未修改');return;}
+const backup={event:c.event,evidence:c.evidence,status:c.status,updatedAt:c.updatedAt};
+c.event=ne;c.evidence=nev;c.status=nsTrim;c.updatedAt=new Date().toISOString();
+if(!persistCurrent()){Object.assign(c,backup);return;}
+renderRCList(currentRecord);
+}
+function delRC(i){
+if(!currentRecord) return;
+if(!confirm('刪除此筆 Reality Check？')) return;
+const removed=currentRecord.realityChecks.splice(i,1);
+if(!persistCurrent()){currentRecord.realityChecks.splice(i,0,removed[0]);return;}
+renderRCList(currentRecord);
+}
+function getPromptRole(r){
+if(r.category==='work') return '你是一位工作與職涯反思助手。';
+if(r.category==='love') return '你是一位關係反思助手。';
+if(r.category==='study') return '你是一位學習與研究反思助手。';
+return '你是一位一般反思助手。';
+}
+function getPromptTasks(r){
+if(r.category==='work') return '提供：3個STAR案例整理點，2個提問面試官/主管的問題，1個後續追蹤可驗證指標';
+if(r.category==='love') return '提供：3個關係互動反思點，2個可與對方確認的問題，1個後續可觀察指標';
+if(r.category==='study') return '提供：3個學習方法整理點，2個可向老師/導師提問的問題，1個可驗證的學習成果指標';
+return '提供：3個反思點，2個可進一步釐清的問題，1個可驗證的後續行動';
+}
+function oracleDataLine(r){
+if(r.system==='tarot'&&r.card){
+return `卡牌 ${r.card.name} ${r.card.orientationLabel} 花色 ${suitLabel(r.card.suit)} 解讀模式 ${r.card.modeLabel} 意義 ${r.card.meaning}`;
+}
+return `本卦 ${r.primary.name} ${r.primary.sym} ${JSON.stringify(r.primary.bin)} 爻值 ${r.lines.join(',')} 動爻 ${r.movingLines.join('、')||'無'} 之卦 ${r.changed?r.changed.name:'無'} binary ${r.changed?JSON.stringify(r.changed.bin):'null'}`;
+}
+function buildPrompt(r){
+return `${getPromptRole(r)}
+
+【背景】分類：${r.category} / ${r.subcategory} 專案：${PROJECTS[r.projectId]?.name||r.projectId}
+【問題】${r.question}
+【占卜資料】${oracleDataLine(r)}
+
+【要求】
+- 區分：1. 占卜象徵 2. 可準備的事實 3. 可驗證行動
+- ${getPromptTasks(r)}
+- 不得將占卜結果描述為客觀結果的預測
+
+免責：僅供娛樂、自我反思與個人紀錄，無法以科學方法驗證具有預測未來或建立客觀因果關係的能力，不應取代專業判斷。
+`;
+}
+function updatePromptPreview(r){const el=document.getElementById('promptPreview');if(el) el.textContent=buildPrompt(r);}
+function togglePromptPreview(){
+const el=document.getElementById('promptPreview');if(!el) return;
+if(el.classList.contains('hidden')&&currentRecord) updatePromptPreview(currentRecord);
+el.classList.toggle('hidden');
+}
+function copyPromptCurrent(){if(!currentRecord) return;copyText(buildPrompt(currentRecord),'已複製 LLM Prompt（基於目前結果）');}
+/* [P3] 時間軸／紀錄列表原本假設每筆都是易經（會顯示「無變卦」），塔羅紀錄的 movingLines
+   固定是空陣列、changed 固定是 null，套用原邏輯會誤顯示「無變卦」——塔羅根本沒有變卦這個概念。
+   resultSummaryText() 依 system 分流，塔羅只顯示卡牌名稱（已含正逆位）。 */
+function resultSummaryText(r){
+if(r.system==='tarot') return `${r.primary?.name||''}`;
+return `${r.primary?.name||''} ${r.primary?.sym||''} ${r.movingLines.length?'→ '+(r.changed?.name||'（之卦資料缺失）'):'無變卦'}`;
+}
+function renderTimeline(){
+const cont=document.getElementById('timeline');
+const all=loadRecords();
+const recs=currentContextProject==='all'?all:all.filter(r=>r.projectId===currentContextProject);
+if(!recs.length){cont.innerHTML=`<p class="small">${all.length?'此範圍內尚無紀錄':'尚無紀錄'}</p>`;return;}
+/* [FIX-5] changed 可能為 null，原本會擲出 TypeError 使整個時間軸空白 */
+cont.innerHTML=recs.map(r=>`
+<div style="position:relative;margin-bottom:20px">
+<div class="dot" style="top:6px"></div>
+<div class="small">${escapeHTML(fmtTime(r.createdAt))} · ${escapeHTML(r.category||'')}/${escapeHTML(r.subcategory||'')} · ${escapeHTML(PROJECTS[r.projectId]?.name||r.projectId||'')}</div>
+<div class="content" style="font-weight:600">${escapeHTML(r.question)}</div>
+<div class="small">${escapeHTML(resultSummaryText(r))} · ${r.realityChecks.length?r.realityChecks.map(c=>escapeHTML(statusLabel(c.status))).join(','):'尚未發生'}</div>
+<div class="small">${r.realityChecks.map(c=>escapeHTML(c.event)).join('；')||''}</div>
+</div>
+`).join('');
+}
+/* [P0] 脈絡分析：同一範圍（單一專案或全部）內的多筆紀錄比對。
+   全部是既有欄位的次數統計，不做語意理解、不做心理或因果推論。
+   統計項目：分類分布、重複出現的結果（易經本卦或塔羅卡牌）、Reality Check 狀態分布、重複字詞（字串層級，非主題模型）。 */
+function computeHexagramRepeats(records,minCount){
+minCount=minCount||2;
+const freq=new Map();
+records.forEach(r=>{if(r.primary&&r.primary.name) freq.set(r.primary.name,(freq.get(r.primary.name)||0)+1);});
+return [...freq.entries()].filter(([,c])=>c>=minCount).sort((a,b)=>b[1]-a[1]);
+}
+function computeCategoryFreq(records){
+const freq=new Map();
+records.forEach(r=>{const key=`${r.category||'?'}/${r.subcategory||'?'}`;freq.set(key,(freq.get(key)||0)+1);});
+return [...freq.entries()].sort((a,b)=>b[1]-a[1]);
+}
+function computeRealityCheckStats(records){
+const statusCount={};
+let withAny=0,without=0;
+records.forEach(r=>{
+const checks=r.realityChecks||[];
+if(checks.length) withAny++; else without++;
+checks.forEach(c=>{const s=VALID_STATUS.includes(c.status)?c.status:'unknown';statusCount[s]=(statusCount[s]||0)+1;});
+});
+return {statusCount,withAny,without};
+}
+const CJK_STRIP_RE=/[，。！？、；：「」『』（）()\[\]{},.!?;:'"“”…\-\s]/g;
+/* 重複字詞：字串層級的 n-gram（長度 2-6）出現次數統計，
+   要求同一字串出現在 ≥2 筆不同紀錄的問題文字中才計入；
+   不理解詞義，只反映「重複打過的字」，可能包含無意義片段。 */
+function computeRepeatedPhrases(records,minRecords,maxLen,topN){
+minRecords=minRecords||2;maxLen=maxLen||6;topN=topN||10;
+const docFreq=new Map();
+records.forEach(r=>{
+const clean=String(r.question||'').replace(CJK_STRIP_RE,'');
+const seen=new Set();
+for(let len=2;len<=maxLen&&len<=clean.length;len++){
+for(let i=0;i+len<=clean.length;i++) seen.add(clean.slice(i,i+len));
+}
+seen.forEach(g=>{if(!docFreq.has(g)) docFreq.set(g,new Set());docFreq.get(g).add(r.id);});
+});
+let arr=[...docFreq.entries()].filter(([,ids])=>ids.size>=minRecords).map(([phrase,ids])=>({phrase,count:ids.size}));
+arr.sort((a,b)=>b.phrase.length-a.phrase.length||b.count-a.count);
+const kept=[];
+arr.forEach(item=>{if(!kept.some(k=>k.count===item.count&&k.phrase.includes(item.phrase))) kept.push(item);});
+kept.sort((a,b)=>b.count-a.count||b.phrase.length-a.phrase.length);
+return kept.slice(0,topN);
+}
+function renderContextAnalysis(){
+const el=document.getElementById('contextAnalysis');if(!el) return;
+const all=loadRecords();
+const pid=currentContextProject;
+const records=pid==='all'?all:all.filter(r=>r.projectId===pid);
+const label=pid==='all'?'全部專案':(PROJECTS[pid]?.name||pid);
+if(!records.length){el.innerHTML=`<p class="small">「${escapeHTML(label)}」目前尚無紀錄</p>`;return;}
+if(records.length<2){el.innerHTML=`<p class="small">「${escapeHTML(label)}」目前只有 ${records.length} 筆紀錄，暫不足以比對重複模式（建議累積 2 筆以上再參考此區）。</p>`;return;}
+const dates=records.map(r=>r.createdAt).filter(Boolean).sort();
+const hexReps=computeHexagramRepeats(records);
+const catFreq=computeCategoryFreq(records);
+const rc=computeRealityCheckStats(records);
+const phrases=computeRepeatedPhrases(records);
+const rcStatusText=Object.entries(rc.statusCount).filter(([,c])=>c>0).map(([s,c])=>`${escapeHTML(statusLabel(s))} × ${c}`).join('　')||'（尚無 Reality Check）';
+el.innerHTML=`
+<p class="content" style="font-weight:700">${escapeHTML(label)} · 共 ${records.length} 筆 · ${escapeHTML(fmtTime(dates[0]).slice(0,10))} 至 ${escapeHTML(fmtTime(dates[dates.length-1]).slice(0,10))}</p>
+<p class="small" style="margin-top:6px">以下為次數統計，不代表因果關係或未來預測；樣本數少時代表性有限。</p>
+<div class="card-sub" style="margin-top:10px">
+<p class="content" style="font-weight:600">分類分布</p>
+<p class="small">${catFreq.map(([k,c])=>`${escapeHTML(k)} × ${c}`).join('　')}</p>
+</div>
+<div class="card-sub" style="margin-top:10px">
+<p class="content" style="font-weight:600">重複出現的結果（≥2 次，易經本卦或塔羅卡牌含正逆位）</p>
+<p class="small">${hexReps.length?hexReps.map(([n,c])=>`${escapeHTML(n)} × ${c}`).join('　'):'（此範圍內沒有重複的本卦）'}</p>
+</div>
+<div class="card-sub" style="margin-top:10px">
+<p class="content" style="font-weight:600">Reality Check 統計</p>
+<p class="small">已填寫至少一筆：${rc.withAny} 筆 · 尚未填寫：${rc.without} 筆<br>${rcStatusText}</p>
+</div>
+<div class="card-sub" style="margin-top:10px">
+<p class="content" style="font-weight:600">重複字詞（依文字比對，非語意理解，僅供參考）</p>
+<p class="small">${phrases.length?phrases.map(p=>`「${escapeHTML(p.phrase)}」× ${p.count}`).join('　'):'（沒有偵測到重複出現 2 個字以上的字串）'}</p>
+</div>
+`;
+}
+function renderAllRecords(){
+const cont=document.getElementById('allRecords');
+const recs=loadRecords();
+if(!recs.length){cont.innerHTML='<p class="small">尚無紀錄</p>';return;}
+cont.innerHTML=recs.map(r=>`
+<div class="card-sub record-item" data-record-id="${escapeHTML(r.id)}" style="margin-bottom:12px;cursor:pointer">
+<div class="content" style="font-weight:600">${escapeHTML(r.question)}</div>
+<div class="small">${escapeHTML(fmtTime(r.createdAt))} · ${escapeHTML(resultSummaryText(r))} · ${r.realityChecks?.map(c=>escapeHTML(statusLabel(c.status))).join(',')||'尚未發生'} · ${escapeHTML(PROJECTS[r.projectId]?.name||r.projectId||'')}</div>
+</div>
+`).join('');
+cont.querySelectorAll('.record-item').forEach(el=>{
+el.addEventListener('click',()=>{openRecord(el.dataset.recordId);});
+});
+}
+function openRecord(id){
+const recs=loadRecords();const r=recs.find(x=>x.id===id);if(!r) return;
+currentRecord=r;currentSystem=r.system;currentCat=r.category;currentSub=r.subcategory;
+document.querySelectorAll('[data-cat]').forEach(el=>el.classList.toggle('active',el.dataset.cat===currentCat));
+renderSubCats();
+document.querySelectorAll('#systemTabs [data-system]').forEach(el=>el.classList.toggle('active',el.dataset.system===currentSystem));
+updateDrawUI();
+switchView('oracle');renderResult(r);
+}
+function deleteCurrent(){
+if(!currentRecord) return;
+if(!confirm('確定刪除此筆紀錄？')) return;
+const recs=loadRecords().filter(x=>x.id!==currentRecord.id);
+if(!saveRecords(recs)) return;
+document.getElementById('resultBox').classList.add('hidden');
+document.getElementById('lastInfo').textContent='';
+currentRecord=null;
+renderTimeline();renderAllRecords();
+}
+function copyTimelinePrompt(){
+const recs=loadRecords();if(!recs.length){alert('尚無脈絡');return;}
+const projects=[...new Set(recs.map(r=>r.projectId))];
+const cats=[...new Set(recs.map(r=>r.category))];
+const grouped={};recs.forEach(r=>{if(!grouped[r.projectId]) grouped[r.projectId]=[];grouped[r.projectId].push(r);});
+let txt=`【ORACLE·脈絡分析】\n專案：${projects.map(p=>PROJECTS[p]?.name||p).join(', ')} \n分類：${cats.join(', ')} \n時間範圍：${(recs[recs.length-1].createdAt||'').slice(0,10)} 至 ${(recs[0].createdAt||'').slice(0,10)}\n\n`;
+for(let pid of projects){
+txt+=`\n--- 專案 ${PROJECTS[pid]?.name||pid} ---\n`;
+let list=grouped[pid].slice().reverse();
+list.forEach(r=>{
+const resultPart=r.system==='tarot'?`卡牌：${r.primary?.name||''}`:`本卦：${r.primary?.name||''} ${r.primary?.sym||''} 動爻：${r.movingLines.join('、')||'無'} 之卦：${r.changed?r.changed.name:'無'}`;
+txt+=`[${(r.createdAt||'').slice(0,10)}] 問題：${r.question} / 系統：${r.system} / ${resultPart} / 原始：${r.originalInterpretation||''} / 驗證：${r.realityChecks.map(c=>c.event+'('+c.status+')').join(';')||'無'} 狀態：${r.realityChecks[r.realityChecks.length-1]?.status||'尚未發生'}\n`;
+});
+}
+txt+=`\n請分析10點：1重複主題2相似訊息3已驗證部分4無證據部分5期待與情緒6事後合理化風險7可保留反思價值8無法驗證部分9區分象徵-AI解讀-現實證據10合理結論與下一步可驗證行動。限制：不得將占卜描述為客觀事實。`;
+copyText(txt,'已複製整條脈絡 Prompt（依專案分組）');
+}
+function doReset(){
+if(!confirm('確定清除所有本機紀錄？此動作不可復原（隔離區與備份不會被清除，請至設定頁另行處理）')) return;
+if(!confirm('二次確認：真的要刪除全部紀錄嗎？包含所有專案與驗證')) return;
+try{localStorage.removeItem(RECORDS_KEY);localStorage.removeItem(PROJECTS_KEY);}catch(e){alert('清除失敗：'+e.message);return;}
+currentRecord=null;
+updateCount();renderTimeline();renderAllRecords();renderQuarantineInfo();
+document.getElementById('resultBox').classList.add('hidden');
+document.getElementById('lastInfo').textContent='';
+alert('已清除所有本機紀錄（隔離區保留）');
+}
+function testToss(){
+let c={6:0,7:0,8:0,9:0};let N=100000;for(let i=0;i<N;i++) c[tossLine()]++;
+let p6=c[6]/N*100,p7=c[7]/N*100,p8=c[8]/N*100,p9=c[9]/N*100;
+function pass(actual,expected){return Math.abs(actual-expected)<2.5?'PASS':'FAIL';}
+const out=document.getElementById('tossOut');
+out.textContent=`抽樣 ${N} 次 理論 6:12.5% 7:37.5% 8:37.5% 9:12.5%\n實際：6 ${p6.toFixed(2)}% ${pass(p6,12.5)}  7 ${p7.toFixed(2)}% ${pass(p7,37.5)}  8 ${p8.toFixed(2)}% ${pass(p8,37.5)}  9 ${p9.toFixed(2)}% ${pass(p9,12.5)}\n判定門檻：與理論值相差 < 2.5 個百分點`;
+}
+(async()=>{
+try{
+await runValidation();
+}catch(e){
+console.error("Validation failed:",e);
+DATA_STATUS.checkedAt=new Date().toISOString().slice(0,10);
+DATA_STATUS.hash="UNAVAILABLE";
+try{renderStatus();}catch(renderErr){console.error("renderStatus failed:",renderErr);}
+}
+renderSubCats();
+initProjects();
+initContextProjectSel();
+updateDrawUI();
+updateCount();
+renderTimeline();
+renderQuarantineInfo();
+})();
+</script>
+</body>
+</html>
