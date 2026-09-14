@@ -50,7 +50,8 @@ input[type=text]:focus{outline:2px solid var(--indigo);outline-offset:1px;border
   display:flex;flex-direction:column;justify-content:center;
 }
 .stack{display:flex;flex-direction:column-reverse;gap:11px;}
-.line{display:grid;grid-template-columns:26px 1fr 44px;align-items:center;gap:10px;}
+/* 第三欄要放得下一整行「9 老陽 ○」（約 97px） */
+.line{display:grid;grid-template-columns:26px 1fr 104px;align-items:center;gap:10px;}
 .line .idx{
   font-family:ui-monospace,Menlo,monospace;font-size:19px;color:var(--ink-soft);text-align:right;
 }
@@ -59,6 +60,7 @@ input[type=text]:focus{outline:2px solid var(--indigo);outline-offset:1px;border
 .line[data-yin="1"] .bars .bar{flex:0 0 calc(50% - 4.5px);}
 .line .mark{
   font-family:ui-monospace,Menlo,monospace;font-size:19px;color:var(--ink-soft);letter-spacing:.06em;
+  white-space:nowrap;
 }
 .line[data-changing="1"] .bars .bar{background:var(--cinnabar);}
 .line[data-changing="1"] .mark{color:var(--cinnabar);}
@@ -66,6 +68,10 @@ input[type=text]:focus{outline:2px solid var(--indigo);outline-offset:1px;border
 @keyframes draw{from{opacity:0;transform:translateY(7px) scaleX(.86);}to{opacity:1;transform:none;}}
 .placeholder{color:var(--ink-soft);font-size:20px;text-align:center;}
 .result{margin-top:4px;}
+.question{
+  margin:0 0 0.875rem;padding-bottom:0.75rem;border-bottom:1px dashed var(--rule);
+  font-size:1.375rem;overflow-wrap:anywhere;
+}
 .name-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
 .glyph{font-size:46px;line-height:1;}
 .name{
@@ -84,6 +90,7 @@ input[type=text]:focus{outline:2px solid var(--indigo);outline-offset:1px;border
   font-size:21px;
 }
 .moving strong{color:var(--cinnabar);font-weight:600;}
+.changed-title{margin:0.625rem 0 0;font-size:1.25rem;color:var(--ink-soft);letter-spacing:.2em;}
 .empty{
   font-size:20px;color:var(--ink-soft);
   border:1px dashed var(--rule);padding:12px;border-radius:2px;margin-top:12px;
@@ -102,8 +109,41 @@ input[type=text]:focus{outline:2px solid var(--indigo);outline-offset:1px;border
 .cast:focus-visible{outline:2px solid var(--cinnabar);outline-offset:2px;}
 .coins{
   text-align:center;font-family:ui-monospace,Menlo,monospace;font-size:20px;
-  color:var(--ink-soft);height:22px;margin:10px 0 0;letter-spacing:.1em;
+  color:var(--ink-soft);min-height:34px;margin:10px 0 0;letter-spacing:.1em;
 }
+.cast-error{margin:0;font-size:1.3125rem;color:var(--cinnabar);}
+.cast-error:not(:empty){margin:0 0 0.875rem;padding-left:0.75rem;border-left:2px solid var(--cinnabar);}
+/* 給 AI 解讀：Button 用原生 <button>，提示詞框用可聚焦的 <pre><code>；新增尺寸一律 rem */
+.ai-panel{
+  margin:0 0 1.125rem;padding:1.375rem 1.375rem 1.5rem;
+  border:1px solid var(--rule);border-radius:2px;background:#F3F5EE;
+}
+.ai-title{
+  margin:0;font-family:"Songti TC","Noto Serif TC","PMingLiU",serif;
+  font-size:1.75rem;font-weight:600;letter-spacing:.1em;
+}
+.ai-desc{margin:0.375rem 0 0;font-size:1.25rem;color:var(--ink-soft);}
+.ai-copy{
+  display:block;width:100%;min-height:2.75rem;margin:0.875rem 0 0;padding:0.625rem 1rem;
+  border:1px solid var(--indigo);border-radius:2px;background:transparent;color:var(--indigo);
+  font-family:inherit;font-size:1.3125rem;line-height:1.4;letter-spacing:.12em;cursor:pointer;
+}
+.ai-copy:hover{background:var(--paper);}
+.ai-copy:active{background:var(--paper-deep);}
+.ai-copy:focus-visible{outline:2px solid var(--cinnabar);outline-offset:3px;}
+.copy-status{margin:0;font-size:1.1875rem;color:var(--indigo);}
+.copy-status:not(:empty){margin-top:0.5rem;}
+.copy-status[data-state="fail"]{color:var(--cinnabar);}
+.ai-prompt-box{
+  margin:0.875rem 0 0;max-height:24rem;overflow-y:auto;
+  padding:0.875rem 1rem;border:1px solid var(--rule);border-radius:2px;
+  background:var(--paper);color:var(--ink);
+  font-family:inherit;font-size:1.1875rem;line-height:1.75;
+  white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
+}
+.ai-prompt-box code{font:inherit;}
+.ai-prompt-box:focus-visible{outline:2px solid var(--cinnabar);outline-offset:3px;}
+.copy-buffer{position:fixed;top:0;left:-9999px;opacity:0;}
 footer{
   margin-top:34px;padding-top:14px;border-top:1px solid var(--rule);
   font-size:20px;color:var(--ink-soft);
@@ -123,14 +163,22 @@ footer p{margin:0 0 6px;}
   </header>
   <div class="ask">
     <label for="q">想問的事（可留空，只存在這個畫面）</label>
-    <input type="text" id="q" placeholder="例：這份工作要不要接" autocomplete="off">
+    <input type="text" id="q" placeholder="例：這份工作要不要接" autocomplete="off" maxlength="200">
   </div>
   <div class="stage" id="stage" aria-live="polite">
     <div class="placeholder" id="placeholder">心裡想著問題，按下方按鈕。</div>
     <div class="stack" id="stack" hidden></div>
     <div class="result" id="result" hidden></div>
   </div>
+  <section class="ai-panel" id="aiPanel" aria-labelledby="aiTitle" hidden>
+    <h2 class="ai-title" id="aiTitle">給 AI 解讀</h2>
+    <p class="ai-desc">已將本次起卦整理成 AI 可讀格式。本頁不會自動送出，貼到哪個 AI 由你決定。</p>
+    <button type="button" class="ai-copy" id="copyAiPrompt">複製提示詞</button>
+    <p class="copy-status" id="copyStatus" aria-live="polite"></p>
+    <pre class="ai-prompt-box" id="aiPromptBox" tabindex="0" role="region" aria-label="AI 解讀提示詞"><code id="aiPrompt"></code></pre>
+  </section>
   <p class="coins" id="coins"></p>
+  <p class="cast-error" id="castError" role="alert"></p>
   <button class="cast" id="cast">起 卦</button>
   <footer>
     <p>本頁為象徵性解讀工具，僅供個人自我反思參考，不構成醫療、法律、財務或心理診斷建議。</p>
@@ -269,12 +317,21 @@ function glyphOf(no){
 
 /* ─────────────────────────────────────────────
    4. 畫面
+      innerHTML 只拼程式內部固定資料（HEXAGRAMS、TRIGRAMS、LINE_LABEL、POSITION）；
+      使用者輸入（#q）一律走 textContent，見 renderQuestion() 與 renderAiPanel()
    ───────────────────────────────────────────── */
 const stackEl = document.getElementById("stack");
 const resultEl = document.getElementById("result");
 const placeholderEl = document.getElementById("placeholder");
 const coinsEl = document.getElementById("coins");
 const castBtn = document.getElementById("cast");
+const questionInput = document.getElementById("q");
+const castErrorEl = document.getElementById("castError");
+const aiPanelEl = document.getElementById("aiPanel");
+const aiPromptBoxEl = document.getElementById("aiPromptBox");
+const aiPromptEl = document.getElementById("aiPrompt");
+const copyBtn = document.getElementById("copyAiPrompt");
+const copyStatusEl = document.getElementById("copyStatus");
 
 function renderLine(line, i){
   const el = document.createElement("div");
@@ -304,7 +361,15 @@ function describe(binary, data){
   return head + tri + text;
 }
 
-function renderResult(lines){
+/* 使用者輸入的出口：建立節點後用 textContent 填字，不經過任何 HTML 字串 */
+function renderQuestion(question){
+  const el = document.createElement("p");
+  el.className = "question";
+  el.textContent = "所問：" + question;
+  return el;
+}
+
+function renderResult(lines, question){
   const primary = toBinary(lines, false);
   const changed = toBinary(lines, true);
   const movingIdx = lines.map((l,i) => l.changing ? POSITION[i] : null).filter(Boolean);
@@ -313,7 +378,7 @@ function renderResult(lines){
 
   if (movingIdx.length > 0){
     html += '<div class="moving"><p><strong>變爻：' + movingIdx.join("、") + '</strong>（硃砂標示）</p>';
-    html += '<p style="margin:10px 0 0;color:var(--ink-soft);font-size:13px;">之卦</p>';
+    html += '<p class="changed-title">之卦</p>';
     html += describe(changed, HEXAGRAMS[changed]);
     html += '</div>';
   } else {
@@ -321,41 +386,235 @@ function renderResult(lines){
   }
 
   resultEl.innerHTML = html;
+  if (question) resultEl.prepend(renderQuestion(question));
   resultEl.hidden = false;
+
+  renderAiPanel(buildAiPrompt({
+    question, lines,
+    primaryBinary: primary, primary: HEXAGRAMS[primary],
+    changedBinary: changed, changed: HEXAGRAMS[changed]
+  }));
+}
+
+/* 給 AI 解讀面板：只顯示與複製文字，不送出任何資料 */
+const COPY_LABEL = "複製提示詞";
+let copyResetTimer = 0;
+
+function setCopyStatus(message, state){
+  copyStatusEl.textContent = message;
+  copyStatusEl.dataset.state = state;
+}
+
+function renderAiPanel(prompt){
+  aiPromptEl.textContent = prompt;
+  aiPromptBoxEl.scrollTop = 0;
+  aiPanelEl.hidden = false;
+}
+
+/* 再起一卦或出錯時呼叫：清掉舊提示詞，確保複製不到上一卦 */
+function resetAiPanel(){
+  aiPanelEl.hidden = true;
+  aiPromptEl.textContent = "";
+  clearTimeout(copyResetTimer);
+  copyBtn.textContent = COPY_LABEL;
+  setCopyStatus("", "");
+}
+
+/* Clipboard API 不可用或被拒時的傳統做法：暫時的唯讀 textarea ＋ execCommand("copy") */
+function copyWithTextarea(text){
+  const previousFocus = document.activeElement;
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.className = "copy-buffer";
+  document.body.appendChild(area);
+  area.select();
+  area.setSelectionRange(0, text.length);
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch (error) {
+    copied = false;
+  }
+  area.remove();
+  if (previousFocus && typeof previousFocus.focus === "function") previousFocus.focus();
+  return copied;
+}
+
+async function copyAiPrompt(){
+  const text = aiPromptEl.textContent;
+  if (!text) return;
+  let copied = false;
+  if (navigator.clipboard && window.isSecureContext){
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch (error) {
+      console.warn("[copy] Clipboard API 失敗，改用傳統複製", error);
+    }
+  }
+  if (!copied) copied = copyWithTextarea(text);
+  if (aiPromptEl.textContent !== text) return; // 複製途中已再起一卦，不動新面板的狀態
+
+  clearTimeout(copyResetTimer);
+  if (copied){
+    copyBtn.textContent = "已複製 ✓";
+    setCopyStatus("已複製到剪貼簿。", "ok");
+    copyResetTimer = setTimeout(() => {
+      copyBtn.textContent = COPY_LABEL;
+      setCopyStatus("", "");
+    }, 1800);
+  } else {
+    copyBtn.textContent = COPY_LABEL;
+    setCopyStatus("無法自動複製，請手動選取文字。", "fail");
+  }
 }
 
 async function cast(fixedValues){
   castBtn.disabled = true;
-  placeholderEl.hidden = true;
-  resultEl.hidden = true;
-  stackEl.hidden = false;
-  stackEl.innerHTML = "";
+  try {
+    const question = questionInput.value.trim();
+    castErrorEl.textContent = "";
+    resetAiPanel();
+    placeholderEl.hidden = true;
+    resultEl.hidden = true;
+    stackEl.hidden = false;
+    stackEl.innerHTML = "";
 
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const delay = (reduce || fixedValues) ? 0 : 380;
-  const lines = [];
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const delay = (reduce || fixedValues) ? 0 : 380;
+    const lines = [];
 
-  for (let i = 0; i < 6; i++){
-    const line = fixedValues ? lineFromValue(fixedValues[i]) : throwLine();
-    lines.push(line);
-    coinsEl.textContent = fixedValues
-      ? "指定值　第 " + POSITION[i] + " 爻 ＝ " + line.value
-      : "第 " + POSITION[i] + " 爻　" + line.coins.join(" · ") + " ＝ " + line.value;
-    renderLine(line, i);
-    if (delay) await new Promise(r => setTimeout(r, delay));
+    for (let i = 0; i < 6; i++){
+      const line = fixedValues ? lineFromValue(fixedValues[i]) : throwLine();
+      lines.push(line);
+      coinsEl.textContent = fixedValues
+        ? "指定值　第 " + POSITION[i] + " 爻 ＝ " + line.value
+        : "第 " + POSITION[i] + " 爻　" + line.coins.join(" · ") + " ＝ " + line.value;
+      renderLine(line, i);
+      if (delay) await new Promise(r => setTimeout(r, delay));
+    }
+
+    if (!fixedValues) coinsEl.textContent = "";
+    renderResult(lines, question);
+    castBtn.textContent = "再 起 一 卦";
+  } catch (error) {
+    /* 使用者只看到簡短提示；細節留在 Console */
+    console.error("[cast] 起卦失敗", error);
+    castErrorEl.textContent = "起卦過程發生錯誤，請再試一次。";
+    coinsEl.textContent = "";
+    stackEl.hidden = true;
+    resultEl.hidden = true;
+    resetAiPanel();
+    placeholderEl.hidden = false;
+  } finally {
+    castBtn.disabled = false;
   }
-
-  if (!fixedValues) coinsEl.textContent = "";
-  renderResult(lines);
-  castBtn.disabled = false;
-  castBtn.textContent = "再 起 一 卦";
 }
 
 castBtn.addEventListener("click", () => cast());
+copyBtn.addEventListener("click", () => {
+  copyAiPrompt().catch(error => {
+    console.error("[copy] 複製失敗", error);
+    setCopyStatus("無法自動複製，請手動選取文字。", "fail");
+  });
+});
 
 
 /* ─────────────────────────────────────────────
-   5. 資料自我檢查（結果印在瀏覽器 Console）
+   5. 給 AI 解讀的提示詞：純函式，只把本次起卦結果整理成純文字
+      不碰 DOM、不呼叫任何 API；使用者問題原樣放入，顯示時一律走 textContent
+   ───────────────────────────────────────────── */
+/* 「老陰 ✕」→「老陰」：提示詞只寫爻名，不帶畫面上的標記符號 */
+function lineName(value){
+  return LINE_LABEL[value].split(" ")[0];
+}
+
+function lineForAi(line, i){
+  return POSITION[i] + "爻：" + line.value + " " + lineName(line.value);
+}
+
+function hexagramForAi(title, binary, data, summaryTitle, actionTitle){
+  const t = trigramsOf(binary);
+  return [
+    "【" + title + "】",
+    data ? "第 " + data.no + " 卦　" + data.name : "尚未建入此卦資料",
+    "卦象代碼：" + binary,
+    "上卦：" + t.upper.symbol + " " + t.upper.name + "（" + t.upper.nature + "）",
+    "下卦：" + t.lower.symbol + " " + t.lower.name + "（" + t.lower.nature + "）",
+    "",
+    "【" + summaryTitle + "】",
+    data ? data.summary : "尚未建入",
+    "",
+    "【" + actionTitle + "】",
+    data ? data.action : "尚未建入"
+  ].join("\n");
+}
+
+/* lines 維持資料契約（lines[0]=初爻）；只有輸出【六爻結果】時才反轉成畫面的上→初順序 */
+function buildAiPrompt({ question, lines, primaryBinary, primary, changedBinary, changed }){
+  const q = (question || "").trim();
+  const moving = lines.map((line, i) => ({ line, i })).filter(m => m.line.changing);
+  const hasMoving = moving.length > 0;
+
+  const rules = [
+    "不要重新起卦。",
+    "不要另外產生隨機卦象。",
+    "以下卦象就是本次實際結果，請直接依資料解讀。",
+    "請區分「經典易經象徵性詮釋」與客觀事實。",
+    "易經屬象徵性解讀，目前無法以科學方法驗證其預測能力。",
+    hasMoving
+      ? "不要只逐項解釋，要把本卦、變爻與之卦串成完整脈絡。"
+      : "不要只逐項解釋，要把六爻與本卦串成完整脈絡。",
+    (hasMoving ? "【本頁白話摘要】【本頁行動提示】【之卦白話摘要】【之卦行動提示】"
+               : "【本頁白話摘要】【本頁行動提示】") +
+      "是本網站自撰的白話說明，不是《易經》原文，請勿當成經文引用。"
+  ];
+
+  const steps = [["核心卦意", q ? "先說明本卦對這個問題呈現的主要局勢。" : "先說明本卦呈現的主要局勢。"]];
+  if (hasMoving){
+    steps.push(["變爻", "說明哪些爻正在變，以及這些變化代表局勢的哪個部分正在轉折。"]);
+    steps.push(["本卦 → 之卦", "分析局勢由本卦走向之卦的能量與方向，不要把兩卦當成完全無關的兩張牌。"]);
+  }
+  steps.push(q
+    ? ["直接回答問題", "針對【占問問題】給出明確、具體的解讀，不要只講抽象哲理。"]
+    : ["整體局勢", "由於沒有具體問題，請以整體局勢與目前最值得注意的主題為主，不要自行假設使用者是在問感情、工作或財務。"]);
+  steps.push(["實際提醒", "列出：\n- 現在較有利的做法\n- 現在需要避免的做法\n- 最值得觀察的訊號"]);
+  const ORDER = ["一", "二", "三", "四", "五"];
+
+  return [
+    hasMoving
+      ? "請依照《易經》六爻與本卦、變爻、之卦的關係，解讀以下這次已經完成的起卦結果。"
+      : "請依照《易經》六爻與本卦的關係，解讀以下這次已經完成的起卦結果。",
+    "",
+    "重要：",
+    ...rules.map((rule, i) => (i + 1) + ". " + rule),
+    "",
+    "【占問問題】",
+    q || "未填寫具體問題。",
+    "",
+    "【六爻結果】",
+    ...lines.map(lineForAi).reverse(),
+    "",
+    hexagramForAi("本卦", primaryBinary, primary, "本頁白話摘要", "本頁行動提示"),
+    "",
+    "【變爻】",
+    ...(hasMoving ? moving.map(m => lineForAi(m.line, m.i)) : ["無。六爻皆不變。"]),
+    "",
+    ...(hasMoving
+      ? [hexagramForAi("之卦", changedBinary, changed, "之卦白話摘要", "之卦行動提示")]
+      : ["【之卦】", "無。", "", "本次請以本卦為核心解讀，不需要硬加入之卦。"]),
+    "",
+    "請依以下順序解讀：",
+    "",
+    ...steps.flatMap(([title, body], i) => [ORDER[i] + "、" + title, body, ""]),
+    "請不要把象徵性解讀描述成已確定會發生的客觀事件。"
+  ].join("\n");
+}
+
+
+/* ─────────────────────────────────────────────
+   6. 資料自我檢查（結果印在瀏覽器 Console）
    ───────────────────────────────────────────── */
 function checkConsistency(){
   const byNo = {}, byName = {};
@@ -400,30 +659,90 @@ function allBinaries(){
   for (let i = 0; i < 64; i++) out.push(i.toString(2).padStart(6, "0"));
   return out;
 }
-const KNOWN_SAMPLES = {
-  "111111":{ no:1, name:"乾" },
-  "000000":{ no:2, name:"坤" },
-  "100010":{ no:3, name:"屯" },
-  "010001":{ no:4, name:"蒙" },
-  "111010":{ no:5, name:"需" },
-  "010111":{ no:6, name:"訟" },
-  "010000":{ no:7, name:"師" },
-  "000010":{ no:8, name:"比" }
+/* 獨立 canonical 對照表（通行本文王卦序）
+   · binary 由卦名的上下卦手算：前三碼下卦、後三碼上卦，由下往上，1=陽
+   · 刻意不從 HEXAGRAMS 複製、也不用程式產生，才能拿來驗證 HEXAGRAMS
+   · 出處層級：依通行本卦序整理，未逐字對照特定版本文獻 */
+const CANONICAL_HEXAGRAMS = {
+  "111111": { no:1,  name:"乾為天" },
+  "000000": { no:2,  name:"坤為地" },
+  "100010": { no:3,  name:"水雷屯" },
+  "010001": { no:4,  name:"山水蒙" },
+  "111010": { no:5,  name:"水天需" },
+  "010111": { no:6,  name:"天水訟" },
+  "010000": { no:7,  name:"地水師" },
+  "000010": { no:8,  name:"水地比" },
+  "111011": { no:9,  name:"風天小畜" },
+  "110111": { no:10, name:"天澤履" },
+  "111000": { no:11, name:"地天泰" },
+  "000111": { no:12, name:"天地否" },
+  "101111": { no:13, name:"天火同人" },
+  "111101": { no:14, name:"火天大有" },
+  "001000": { no:15, name:"地山謙" },
+  "000100": { no:16, name:"雷地豫" },
+  "100110": { no:17, name:"澤雷隨" },
+  "011001": { no:18, name:"山風蠱" },
+  "110000": { no:19, name:"地澤臨" },
+  "000011": { no:20, name:"風地觀" },
+  "100101": { no:21, name:"火雷噬嗑" },
+  "101001": { no:22, name:"山火賁" },
+  "000001": { no:23, name:"山地剝" },
+  "100000": { no:24, name:"地雷復" },
+  "100111": { no:25, name:"天雷無妄" },
+  "111001": { no:26, name:"山天大畜" },
+  "100001": { no:27, name:"山雷頤" },
+  "011110": { no:28, name:"澤風大過" },
+  "010010": { no:29, name:"坎為水" },
+  "101101": { no:30, name:"離為火" },
+  "001110": { no:31, name:"澤山咸" },
+  "011100": { no:32, name:"雷風恆" },
+  "001111": { no:33, name:"天山遯" },
+  "111100": { no:34, name:"雷天大壯" },
+  "000101": { no:35, name:"火地晉" },
+  "101000": { no:36, name:"地火明夷" },
+  "101011": { no:37, name:"風火家人" },
+  "110101": { no:38, name:"火澤睽" },
+  "001010": { no:39, name:"水山蹇" },
+  "010100": { no:40, name:"雷水解" },
+  "110001": { no:41, name:"山澤損" },
+  "100011": { no:42, name:"風雷益" },
+  "111110": { no:43, name:"澤天夬" },
+  "011111": { no:44, name:"天風姤" },
+  "000110": { no:45, name:"澤地萃" },
+  "011000": { no:46, name:"地風升" },
+  "010110": { no:47, name:"澤水困" },
+  "011010": { no:48, name:"水風井" },
+  "101110": { no:49, name:"澤火革" },
+  "011101": { no:50, name:"火風鼎" },
+  "100100": { no:51, name:"震為雷" },
+  "001001": { no:52, name:"艮為山" },
+  "001011": { no:53, name:"風山漸" },
+  "110100": { no:54, name:"雷澤歸妹" },
+  "101100": { no:55, name:"雷火豐" },
+  "001101": { no:56, name:"火山旅" },
+  "011011": { no:57, name:"巽為風" },
+  "110110": { no:58, name:"兌為澤" },
+  "010011": { no:59, name:"風水渙" },
+  "110010": { no:60, name:"水澤節" },
+  "110011": { no:61, name:"風澤中孚" },
+  "001100": { no:62, name:"雷山小過" },
+  "101010": { no:63, name:"水火既濟" },
+  "010101": { no:64, name:"火水未濟" }
 };
-function checkKnownSamples(){
-  return Object.keys(KNOWN_SAMPLES).map(b => {
-    const expect = KNOWN_SAMPLES[b];
-    const actual = HEXAGRAMS[b];
-    if (!actual) return { binary:b, expect:expect.name + "/no." + expect.no, status:"PENDING", actual:"（尚未建入）" };
-    const nameHit = actual.name.indexOf(expect.name) !== -1;
-    const noHit = actual.no === expect.no;
-    return {
-      binary:b,
-      expect: expect.name + "/no." + expect.no,
-      status: (nameHit && noHit) ? "PASS" : "FAIL",
-      actual: actual.name + "/no." + actual.no + (nameHit ? "" : "（名稱不符）") + (noHit ? "" : "（卦序不符）")
-    };
+function checkCanonicalHexagrams(){
+  const binaries = Object.keys(CANONICAL_HEXAGRAMS);
+  const failures = [];
+  binaries.forEach(binary => {
+    const expected = CANONICAL_HEXAGRAMS[binary];
+    const actual = HEXAGRAMS[binary];
+    const actualNo = actual ? actual.no : null;
+    const actualName = actual ? actual.name : null;
+    if (actualNo !== expected.no || actualName !== expected.name){
+      failures.push({ binary, expectedNo: expected.no, actualNo, expectedName: expected.name, actualName });
+    }
   });
+  const passed = binaries.length - failures.length;
+  return { total: binaries.length, passed, failures, pass: binaries.length === 64 && passed === 64 };
 }
 function checkTable(){
   const keys = Object.keys(HEXAGRAMS);
@@ -471,15 +790,96 @@ function runFixedCases(){
     };
   });
 }
+/* AI 提示詞案例：輸入用真實卦表組成；期望字串一律手寫，不經過 buildAiPrompt */
+function aiPromptInput(values, question){
+  const lines = values.map(lineFromValue);
+  const primaryBinary = toBinary(lines, false);
+  const changedBinary = toBinary(lines, true);
+  return {
+    question, lines,
+    primaryBinary, primary: HEXAGRAMS[primaryBinary],
+    changedBinary, changed: HEXAGRAMS[changedBinary]
+  };
+}
+const AI_PROMPT_CASES = [
+  { id:"AI-A", note:"有問題、有變爻：問題、六爻（上→初）、本卦、變爻、之卦、本頁白話都完整",
+    run: () => buildAiPrompt(aiPromptInput([7,9,7,9,7,6], "這份工作適合我現在接嗎？")),
+    has:["1. 不要重新起卦。",
+         "【占問問題】\n這份工作適合我現在接嗎？\n",
+         "【六爻結果】\n上爻：6 老陰\n五爻：7 少陽\n四爻：9 老陽\n三爻：7 少陽\n二爻：9 老陽\n初爻：7 少陽\n",
+         "【本卦】\n第 43 卦　澤天夬\n卦象代碼：111110\n上卦：☱ 兌（澤）\n下卦：☰ 乾（天）\n",
+         "【本頁白話摘要】\n決斷的時刻，需要公開表態。\n",
+         "【本頁行動提示】\n明快處理，避免拖泥帶水。\n",
+         "【變爻】\n二爻：9 老陽\n四爻：9 老陽\n上爻：6 老陰\n",
+         "【之卦】\n第 37 卦　風火家人\n卦象代碼：101011\n上卦：☴ 巽（風）\n下卦：☲ 離（火）\n",
+         "【之卦白話摘要】\n家庭與團隊的秩序，內外分工。\n",
+         "【之卦行動提示】\n先把內部規則與角色釐清。\n",
+         "三、本卦 → 之卦", "四、直接回答問題"],
+    lacks:["<", "無。六爻皆不變。"] },
+  { id:"AI-B", note:"問題空白：寫未填寫，且不替使用者猜問題類型",
+    run: () => buildAiPrompt(aiPromptInput([7,9,7,9,7,6], "   ")),
+    has:["【占問問題】\n未填寫具體問題。\n", "不要自行假設使用者是在問感情、工作或財務"],
+    lacks:["四、直接回答問題"] },
+  { id:"AI-C", note:"無變爻：變爻與之卦寫「無」，不產生本卦 → 之卦分析",
+    run: () => buildAiPrompt(aiPromptInput([7,7,7,7,7,7], "要不要搬家")),
+    has:["【變爻】\n無。六爻皆不變。\n", "【之卦】\n無。\n", "本次請以本卦為核心解讀，不需要硬加入之卦。"],
+    lacks:["【之卦白話摘要】", "本卦 → 之卦"] },
+  { id:"AI-D", note:"問題維持純文字：去掉前後空白，不轉義、不夾 HTML",
+    run: () => buildAiPrompt(aiPromptInput([8,8,8,8,8,8], "  <img src=x onerror=alert(1)>  ")),
+    has:["【占問問題】\n<img src=x onerror=alert(1)>\n"],
+    lacks:["&lt;"] },
+  { id:"AI-E", note:"卦表缺資料時不當掉，標示尚未建入",
+    run: () => buildAiPrompt({ question:"", lines:[7,7,7,7,7,7].map(lineFromValue),
+                               primaryBinary:"111111", primary:undefined,
+                               changedBinary:"111111", changed:undefined }),
+    has:["尚未建入"],
+    lacks:["undefined"] }
+];
+function runAiPromptCases(){
+  return AI_PROMPT_CASES.map(c => {
+    let missing = [], unexpected = [], error = "";
+    try {
+      const text = c.run();
+      missing = c.has.filter(s => !text.includes(s));
+      unexpected = c.lacks.filter(s => text.includes(s));
+    } catch (e) {
+      error = e.message;
+    }
+    return {
+      case: c.id, note: c.note, missing, unexpected, error,
+      pass: !error && missing.length === 0 && unexpected.length === 0
+    };
+  });
+}
+/* 擲幣抽樣：三枚公平硬幣相加，6／7／8／9 理論機率 1/8、3/8、3/8、1/8 */
+function checkCoinToss(samples){
+  const counts = { 6:0, 7:0, 8:0, 9:0 };
+  let heads = 0, invalid = 0;
+  for (let i = 0; i < samples; i++){
+    const line = throwLine();
+    line.coins.forEach(coin => { if (coin === 3) heads++; else if (coin !== 2) invalid++; });
+    if (line.value in counts) counts[line.value]++; else invalid++;
+  }
+  const expected = { 6:1/8, 7:3/8, 8:3/8, 9:1/8 };
+  const ratio = {};
+  Object.keys(expected).forEach(v => { ratio[v] = counts[v] / samples; });
+  const offBy = Object.keys(expected).filter(v => Math.abs(ratio[v] - expected[v]) > 0.03);
+  const headRatio = heads / (samples * 3);
+  return {
+    samples, ratio, headRatio, invalid, offBy,
+    pass: invalid === 0 && offBy.length === 0 && Math.abs(headRatio - 0.5) < 0.02
+  };
+}
 (function selfCheck(){
+  const mark = ok => ok ? "PASS" : "FAIL";
+  console.log("[STRUCTURE CHECK] 只證明資料表自洽（筆數、唯一、缺漏、合法值），不代表卦名與卦序正確");
   const t = checkTable();
-  console.log("[HEXAGRAM CHECK]");
   console.log("Total: " + t.total + " / 64");
   console.log("Unique binary: " + t.uniqueBinary);
   console.log("Unique no: " + t.uniqueNo);
-  console.log("Invalid binary: [" + t.invalidBinary.join(", ") + "]");
-  console.log("Invalid no: [" + t.invalidNo.join(", ") + "]");
-  console.log("Duplicate no: [" + t.duplicateNo.join(", ") + "]");
+  console.log("Invalid binary (" + t.invalidBinary.length + "): [" + t.invalidBinary.join(", ") + "]");
+  console.log("Invalid no (" + t.invalidNo.length + "): [" + t.invalidNo.join(", ") + "]");
+  console.log("Duplicate no (" + t.duplicateNo.length + "): [" + t.duplicateNo.join(", ") + "]");
   console.log("Missing no (" + t.missingNo.length + "): [" + t.missingNo.join(", ") + "]");
   console.log("Missing binary (" + t.missingBinary.length + "):");
   t.missingBinary.forEach(b => {
@@ -487,7 +887,23 @@ function runFixedCases(){
     console.log('  "' + b + '"  下卦' + tr.lower.name + '（' + tr.lower.nature + '）' +
                 ' 上卦' + tr.upper.name + '（' + tr.upper.nature + '）');
   });
-  console.log(t.pass ? "PASS: Hexagram table complete" : "FAIL: Hexagram table incomplete");
+  const c = checkConsistency();
+  console.log("binary ↔ no ↔ name：no collision " + JSON.stringify(c.noCollision) +
+              "　name collision " + JSON.stringify(c.nameCollision) +
+              "　round-trip fail [" + c.roundTripFail.join(", ") + "]");
+  const structurePass = t.pass && c.pass;
+  console.log(structurePass
+    ? "PASS: structure 64 筆齊全、無重複、無非法值（僅結構自洽）"
+    : "FAIL: structure 資料表有缺漏、重複或非法值");
+  console.log("[CANONICAL HEXAGRAM CHECK] 逐筆對照獨立 64 卦表：binary 須存在，卦序與完整卦名須全等");
+  const canon = checkCanonicalHexagrams();
+  console.log("Canonical fixture: " + canon.total + " / 64");
+  console.log("Canonical failures: " + canon.failures.length);
+  canon.failures.forEach(f => console.log(
+    "  FAIL  " + f.binary + "  預期 第 " + f.expectedNo + " 卦 " + f.expectedName +
+    "　實際 " + (f.actualName === null ? "（缺這一卦）" : "第 " + f.actualNo + " 卦 " + f.actualName)
+  ));
+  console.log(mark(canon.pass) + ": canonical hexagram mapping " + canon.passed + "/64");
   console.log("[FIXED CASES]");
   const results = runFixedCases();
   results.forEach(r => console.log(
@@ -496,29 +912,32 @@ function runFixedCases(){
   ));
   const logicPass = results.every(r => r.pass);
   console.log(logicPass ? "PASS: 轉換邏輯 6/6" : "FAIL: 轉換邏輯有案例未通過，先不要繼續補資料");
-  console.log("[KNOWN SAMPLES]");
-  const samples = checkKnownSamples();
-  samples.forEach(s => console.log(
-    s.status.padEnd(8) + s.binary + "  預期 " + s.expect + "　實際 " + s.actual
-  ));
-  const sampleFail = samples.filter(s => s.status === "FAIL").length;
-  const samplePending = samples.filter(s => s.status === "PENDING").length;
-  console.log(sampleFail > 0
-    ? "FAIL: 已知樣本有 " + sampleFail + " 筆對不上，卦表可能被編錯"
-    : "PASS: 已知樣本無衝突（" + samplePending + " 筆尚未建入，未納入判定）");
-  console.log("[CONSISTENCY] binary ↔ no ↔ name");
-  const c = checkConsistency();
-  console.log("  no collision: " + JSON.stringify(c.noCollision));
-  console.log("  name collision: " + JSON.stringify(c.nameCollision));
-  console.log("  round-trip fail: [" + c.roundTripFail.join(", ") + "]");
-  console.log(c.pass ? "PASS: 三向無衝突" : "FAIL: 三向一致性有衝突");
-  console.log("[NAME ↔ TRIGRAM]");
+  console.log("[NAME ↔ TRIGRAM] 結構檢查：卦名前兩字對上下卦象，不檢查卦序");
   const nameRes = checkNameByTrigram();
   const nameFail = nameRes.filter(r => r.status === "FAIL");
   nameFail.forEach(r => console.log("  FAIL  " + r.binary + "  " + r.name + "  " + r.why));
   console.log(nameFail.length === 0
     ? "PASS: 卦名與上下卦象相符（" + nameRes.filter(r => r.status === "PASS").length + " 筆檢查）"
     : "FAIL: " + nameFail.length + " 筆卦名與上下卦象不符");
+  console.log("[AI PROMPT]");
+  const promptRes = runAiPromptCases();
+  promptRes.forEach(r => console.log(
+    (r.pass ? "PASS" : "FAIL") + "  " + r.case + "  " + r.note +
+    (r.error ? "  錯誤 " + r.error : "") +
+    (r.missing.length ? "  缺少 " + JSON.stringify(r.missing) : "") +
+    (r.unexpected.length ? "  不該出現 " + JSON.stringify(r.unexpected) : "")
+  ));
+  const promptPassed = promptRes.filter(r => r.pass).length;
+  const promptPass = promptPassed === promptRes.length;
+  console.log(mark(promptPass) + ": AI 提示詞 " + promptPassed + "/" + promptRes.length);
+  console.log("[COIN TOSS] 擲幣分布 regression");
+  const coin = checkCoinToss(8000);
+  console.log("6 / 7 / 8 / 9 = " + [6,7,8,9].map(v => (coin.ratio[v] * 100).toFixed(1) + "%").join(" / ") +
+              "（理論 12.5% / 37.5% / 37.5% / 12.5%）　陽面 " + (coin.headRatio * 100).toFixed(1) + "%");
+  console.log(mark(coin.pass) + ": 擲幣分布（抽樣 " + coin.samples + " 爻）");
+  console.log("[SUMMARY] structure " + mark(structurePass) + " · canonical " + mark(canon.pass) +
+              " · fixed cases " + mark(logicPass) + " · name↔trigram " + mark(nameFail.length === 0) +
+              " · AI prompt " + mark(promptPass) + " · coin toss " + mark(coin.pass));
 })();
 </script>
 </body>
