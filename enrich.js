@@ -48,7 +48,7 @@
     originalRender(lines,question); current = {question, values:lines.map(l=>l.value)}; saved = false;
     $('saveReading').hidden = false; $('saveReading').disabled = false; $('saveStatus').textContent = '';
   };
-  castBtn.addEventListener('click', () => { $('saveReading').hidden = true; $('saveStatus').textContent = ''; });
+  castBtn.addEventListener('click', () => { current = null; $('saveReading').hidden = true; $('saveStatus').textContent = ''; }, {capture:true});
   $('saveReading').onclick = () => {
     if(!current || saved) return;
     const record = {...current,id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),date:new Date().toISOString(),note:''};
