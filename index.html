@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
@@ -153,18 +153,27 @@ footer p{margin:0 0 6px;}
   .line.enter{animation:none;}
 }
 </style>
+<link rel="stylesheet" href="enrich.css">
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="eyebrow">三枚硬幣法 · 六爻</div>
-    <h1>起卦</h1>
-    <p class="sub">由初爻往上，一爻擲一次。</p>
+    <div class="eyebrow">THE BOOK OF CHANGES · 易經</div>
+    <h1>一卦，一次觀照。</h1>
+    <p class="sub">在變化之中，找到下一步的方向。</p>
   </header>
+  <nav class="view-nav" aria-label="主要功能">
+    <button data-view="casting" aria-pressed="true">起卦觀照</button><button data-view="library" aria-pressed="false">六十四卦</button><button data-view="learn" aria-pressed="false">入門指南</button><button data-view="journal" aria-pressed="false">我的紀錄</button>
+  </nav>
+  <main>
+  <section id="casting" class="view" aria-label="起卦觀照">
+  <p class="section-kicker">01 / 問一個好問題</p>
   <div class="ask">
     <label for="q">想問的事（可留空，只存在這個畫面）</label>
     <input type="text" id="q" placeholder="例：這份工作要不要接" autocomplete="off" maxlength="200">
   </div>
+  <div class="examples" aria-label="問題靈感"><span>試著問</span><button data-question="面對工作上的新機會，我可以先做好哪些準備？">工作方向</button><button data-question="我可以如何改善這段關係中的溝通？">關係溝通</button><button data-question="目前的生活中，我最需要調整的是什麼？">自我整理</button></div>
+  <p class="section-kicker">02 / 靜心起卦，由下而上</p>
   <div class="stage" id="stage" aria-live="polite">
     <div class="placeholder" id="placeholder">心裡想著問題，按下方按鈕。</div>
     <div class="stack" id="stack" hidden></div>
@@ -180,10 +189,31 @@ footer p{margin:0 0 6px;}
   <p class="coins" id="coins"></p>
   <p class="cast-error" id="castError" role="alert"></p>
   <button class="cast" id="cast">起 卦</button>
+  <div class="save-row"><button id="saveReading" hidden>儲存這次觀照</button><span id="saveStatus" role="status"></span></div>
+  <details class="reading-help"><summary>如何閱讀這次的卦？</summary><p>本卦描述當下的局勢；硃紅色的爻表示正在變動的地方；之卦提供變化後的觀察角度。先對照問題理解處境，再寫下一件可以實踐的小事。</p></details>
+  </section>
+  <section id="library" class="view" aria-labelledby="libraryTitle" hidden>
+    <p class="section-kicker">EXPLORE / 六十四種處境</p><h2 id="libraryTitle">六十四卦圖鑑</h2><p>從卦象認識變化，從白話說明回到生活。</p>
+    <label for="hexSearch">搜尋卦名、卦序或關鍵字</label><input type="search" id="hexSearch" placeholder="例如：乾、24、等待">
+    <div class="filters"><label>上卦<select id="upperFilter"><option value="">全部上卦</option></select></label><label>下卦<select id="lowerFilter"><option value="">全部下卦</option></select></label></div>
+    <p id="libraryCount" role="status"></p><div id="hexDetail" hidden tabindex="-1"></div><div id="hexGrid" class="hex-grid"></div>
+  </section>
+  <section id="learn" class="view" aria-labelledby="learnTitle" hidden>
+    <p class="section-kicker">LEARN / 從這裡開始</p><h2 id="learnTitle">讀懂變化的語言</h2><p>不必急著記住六十四卦。先認識陰陽、八卦與六爻。</p>
+    <div class="learn-grid"><article><h3>一陰一陽</h3><p>陽爻是連續的橫線，陰爻是中間斷開的橫線。可以把它們理解為主動與承接、展開與收斂，兩者並無好壞之分。</p></article><article><h3>八卦到六十四卦</h3><p>三條爻組成一個八卦；兩個八卦上下相疊，便得到六條爻的卦。八乘八，共有六十四種組合。</p></article></div>
+    <h3>八卦速覽</h3><div id="trigramGuide" class="trigram-grid"></div>
+    <h3>三枚硬幣如何成卦？</h3><p>每枚硬幣隨機取 2 或 3，三枚相加得到一條爻。由初爻往上擲六次。</p>
+    <div class="table-scroll"><table><thead><tr><th>數值</th><th>爻的性質</th><th>變化</th><th>機率</th></tr></thead><tbody><tr><td>6</td><td>老陰（斷線）</td><td>陰變陽</td><td>1/8</td></tr><tr><td>7</td><td>少陽（實線）</td><td>不變</td><td>3/8</td></tr><tr><td>8</td><td>少陰（斷線）</td><td>不變</td><td>3/8</td></tr><tr><td>9</td><td>老陽（實線）</td><td>陽變陰</td><td>1/8</td></tr></tbody></table></div>
+    <details open><summary>怎麼把問題問得更具體？</summary><p>把注意力放在自己可以理解與採取的行動。例如把「我一定會成功嗎？」改成「推進這個計畫時，我需要留意哪些阻力？」一次聚焦一個處境，會更容易反思。</p></details>
+    <details><summary>沒有變爻，或有多個變爻，怎麼讀？</summary><p>沒有變爻時，先看本卦呈現的整體狀態。有變爻時，可以把變動的位置與之卦一起參照。不同易學流派有不同的取爻方法，本工具提供卦象與白話摘要，不預設唯一的解讀規則。</p></details>
+    <details><summary>這些說明是易經原文嗎？</summary><p>不是。圖鑑的摘要與行動提示為自撰的反思文字；本工具未收錄完整卦辭、爻辭與經傳註解。如需研讀經典，請另外對照可靠的校注版本。</p></details>
+  </section>
+  <section id="journal" class="view" aria-labelledby="journalTitle" hidden><p class="section-kicker">REFLECT / 留下觀照</p><h2 id="journalTitle">我的起卦紀錄</h2><p>只有按下「儲存這次觀照」的結果才會存在此瀏覽器，最多保留 50 筆。清除瀏覽器資料後紀錄也會消失。</p><div id="journalList"></div><p id="journalStatus" role="status"></p></section>
+  </main>
   <footer>
     <p>本頁為象徵性解讀工具，僅供個人自我反思參考，不構成醫療、法律、財務或心理診斷建議。</p>
     <p>白話說明為自撰草稿，非《易經》原文，使用前請自行校對。</p>
-    <p>隱私提醒：問題欄僅存於當前畫面，請避免輸入真實姓名、公司名稱、電話或地址。</p>
+    <p>隱私提醒：問題預設只留在畫面；按下儲存後，會保留於此瀏覽器的紀錄中。請避免輸入個人敏感資料。</p>
   </footer>
 </div>
 <script>
@@ -940,5 +970,6 @@ function checkCoinToss(samples){
               " · AI prompt " + mark(promptPass) + " · coin toss " + mark(coin.pass));
 })();
 </script>
+<script src="enrich.js"></script>
 </body>
 </html>
